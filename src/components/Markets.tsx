@@ -5,6 +5,7 @@ import React, { useMemo } from 'react';
 import { useReadContract, useReadContracts } from 'wagmi';
 import { CONTRACTS, ABIS } from '../config/contracts';
 import { PositionPill } from './PositionPill';
+import { PriceBar } from './PriceBar';
 
 type MarketsProps = {
   marketIds: bigint[];
@@ -20,7 +21,11 @@ export function Markets({ marketIds, onAfterTx }: MarketsProps) {
       )}
       <div className="list-group">
         {marketIds.map((id) => (
-          <MarketRow key={id.toString()} id={id} onAfterTx={onAfterTx} />
+          <MarketRow
+            key={id.toString()}
+            id={id}
+            onAfterTx={onAfterTx}
+          />
         ))}
       </div>
     </section>
@@ -57,9 +62,11 @@ function MarketRow({
   const positions = (positionsRaw as bigint[] | undefined) || [];
 
   // --- Bundle ALL prices for this market (each position + OTHER) ---
-  const contracts = useMemo(() => {
+  const priceContracts = useMemo(() => {
+    if (!lmsr) return [];
     const cs: any[] = [];
 
+    // 1) one getBackPriceWad per position
     positions.forEach((posId) => {
       cs.push({
         address: lmsr as `0x${string}`,
@@ -69,6 +76,7 @@ function MarketRow({
       });
     });
 
+    // 2) one getReservePriceWad for OTHER
     cs.push({
       address: lmsr as `0x${string}`,
       abi: ABIS.lmsr,
@@ -83,25 +91,49 @@ function MarketRow({
     data: pricesData,
     refetch: refetchMarketPrices,
   } = useReadContracts({
-    contracts,
+    contracts: priceContracts,
     query: {
-      enabled: contracts.length > 0,
+      enabled: priceContracts.length > 0,
+      refetchInterval: 5_000, // poll for on-chain changes
     },
   });
 
-  const getPriceLabelForIndex = (idx: number): string => {
-    if (!pricesData || !pricesData[idx]) return '–';
-    const entry: any = pricesData[idx];
-    const wad = entry?.result as bigint | undefined;
-    if (wad === undefined) return '–';
-    const p = Number(wad) / 1e18;
-    if (!Number.isFinite(p)) return '–';
-    return `$${p.toFixed(3)}`;
-  };
+  // --- Map position -> numeric price (0–1) ---
+  type PosPrice = { positionId: bigint; price: number | null };
 
-  // Reserve / OTHER is last entry
+  const positionPrices: PosPrice[] = useMemo(() => {
+    if (!pricesData || positions.length === 0) {
+      return positions.map((posId) => ({ positionId: posId, price: null }));
+    }
+
+    return positions.map((posId, idx) => {
+      const entry: any = pricesData[idx];
+      const wad = entry?.result as bigint | undefined;
+      if (wad === undefined) {
+        return { positionId: posId, price: null };
+      }
+      const p = Number(wad) / 1e18;
+      if (!Number.isFinite(p)) {
+        return { positionId: posId, price: null };
+      }
+      return { positionId: posId, price: p };
+    });
+  }, [pricesData, positions]);
+
+  // --- Sort positions by price desc (leaderboard) ---
+  const sortedPositionPrices: PosPrice[] = useMemo(() => {
+    return [...positionPrices].sort((a, b) => {
+      const pa = a.price ?? -1;
+      const pb = b.price ?? -1;
+      return pb - pa;
+    });
+  }, [positionPrices]);
+
+  // --- Reserve / OTHER price is last entry in pricesData ---
   let reserveLabel = '–';
+  let reservePrice: number | null = null;
   let hasReserve = false;
+
   if (pricesData && pricesData.length > 0) {
     const reserveIdx = positions.length;
     const reserveEntry: any = pricesData[reserveIdx];
@@ -110,6 +142,7 @@ function MarketRow({
       hasReserve = true;
       const p = Number(reserveRaw) / 1e18;
       if (Number.isFinite(p)) {
+        reservePrice = p;
         reserveLabel = `$${p.toFixed(3)}`;
       }
     }
@@ -132,37 +165,37 @@ function MarketRow({
       </div>
 
       {(positions.length > 0 || hasReserve) && (
-        <ul className="list-inline mb-0">
-          {positions.map((posId, idx) => {
-            const priceLabel = getPriceLabelForIndex(idx);
-            return (
-              <li
-                key={posId.toString()}
-                className="list-inline-item me-3 mb-1"
-              >
-                <PositionPill
-                  marketId={id}
-                  positionId={posId}
-                  priceLabel={priceLabel}
-                  onAfterTx={onAfterTx}
-                  onMarketPriceUpdate={handleMarketPriceUpdate}
-                />
-              </li>
-            );
-          })}
+        <div className="d-flex flex-column gap-2 mb-0">
+          {/* LEADERBOARD POSITIONS (stacked vertically) */}
+          {sortedPositionPrices.map(({ positionId, price }) => (
+            <PositionPill
+              key={positionId.toString()}
+              marketId={id}
+              positionId={positionId}
+              price={price}
+              onAfterTx={onAfterTx}
+              onMarketPriceUpdate={handleMarketPriceUpdate}
+            />
+          ))}
 
+          {/* OTHER PRICE with its own bar */}
           {hasReserve && (
-            <li className="list-inline-item me-3 mb-1">
-              <span className="badge bg-light text-dark border">
-                <strong>OTHER</strong>{' '}
-                <span className="text-muted">Unlisted outcomes</span>{' '}
-                <span className="ms-1 text-primary fw-semibold">
+            <div className="border rounded p-2 bg-light">
+              <div className="d-flex justify-content-between align-items-center mb-1">
+                <div>
+                  <strong>OTHER</strong>{' '}
+                  <span className="text-muted">
+                    Unlisted outcomes
+                  </span>
+                </div>
+                <div className="fw-semibold text-primary">
                   {reserveLabel}
-                </span>
-              </span>
-            </li>
+                </div>
+              </div>
+              <PriceBar price={reservePrice} />
+            </div>
           )}
-        </ul>
+        </div>
       )}
     </div>
   );
