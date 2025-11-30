@@ -14,15 +14,22 @@ const CONTRACTS_ROOT = path.resolve(
 
 const SOURCES = [
   {
-    // MarketMakerLedger
+    // Ledger (MarketMakerLedger)
     artifactPath:
       'artifacts/Contracts/Ledger/Ledger.sol/MarketMakerLedger.json',
     outFile: 'MarketMakerLedger.json',
   },
   {
     // PpUSDC
-    artifactPath: 'artifacts/Contracts/Ledger/ppUSDC.sol/PpUSDC.json',
+    artifactPath:
+      'artifacts/Contracts/Ledger/ppUSDC.sol/PpUSDC.json',
     outFile: 'PpUSDC.json',
+  },
+  {
+    // LMSRMarketMaker
+    artifactPath:
+      'artifacts/Contracts/AMM/LMSRMarketMaker.sol/LMSRMarketMaker.json',
+    outFile: 'LMSRMarketMaker.json',
   },
 ];
 
@@ -41,7 +48,6 @@ for (const { artifactPath, outFile } of SOURCES) {
   }
 
   const raw = JSON.parse(fs.readFileSync(fullArtifactPath, 'utf8'));
-
   const trimmed = { abi: raw.abi };
 
   const destPath = path.join(DEST_DIR, outFile);

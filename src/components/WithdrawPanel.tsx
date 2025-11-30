@@ -1,89 +1,53 @@
+// src/components/WithdrawPanel.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAccount, useWriteContract, usePublicClient } from 'wagmi';
+import { useAccount, useWriteContract } from 'wagmi';
 import { parseUnits } from 'viem';
 import { CONTRACTS, ABIS } from '../config/contracts';
+import { useLedgerTx } from '../hooks/useLedgerTx';
+import { TxStatusBanner } from './TxStatusBanner';
 
 type WithdrawPanelProps = {
   onAfterTx?: () => Promise<unknown> | void;
 };
 
-type Status = 'idle' | 'withdrawing' | 'success' | 'error';
-
 export function WithdrawPanel({ onAfterTx }: WithdrawPanelProps) {
   const { address } = useAccount();
-  const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
   const chainKey = 'sepolia' as const;
   const { ledger } = CONTRACTS[chainKey];
 
-  const [status, setStatus] = useState<Status>('idle');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const {
+    status,
+    errorMessage,
+    runTx,
+    setErrorMessage,
+  } = useLedgerTx({ onAfterTx });
 
-  const isBusy = status === 'withdrawing';
-
-  // 🔁 Auto-reset like DepositPanel
-  useEffect(() => {
-    if (status === 'success' || status === 'error') {
-      const t = setTimeout(() => {
-        setStatus('idle');
-        setErrorMessage(null);
-      }, 3000);
-      return () => clearTimeout(t);
-    }
-  }, [status]);
+  const isBusy = status === 'pending';
 
   const handleWithdraw = async () => {
     if (!address) {
       setErrorMessage('Wallet not connected.');
       return;
     }
-    if (!publicClient) {
-      setErrorMessage('RPC client not ready.');
-      return;
-    }
-    if (isBusy) return;
 
-    setErrorMessage(null);
-    setStatus('withdrawing');
+    const amount = parseUnits('50', 6); // withdraw 50 USDC
 
-    try {
-      const amount = parseUnits('50', 6); // withdraw 50 USDC
-
-      const txHash = await writeContractAsync({
+    await runTx(() =>
+      writeContractAsync({
         address: ledger as `0x${string}`,
         abi: ABIS.ledger,
         functionName: 'withdraw',
         args: [amount, address],
         gas: 3_000_000n,
-      });
-
-      console.log('✅ withdraw tx hash:', txHash);
-
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
-
-      setStatus('success');
-
-      if (onAfterTx) {
-        await onAfterTx();
-      }
-    } catch (err: any) {
-      console.error('❌ Withdraw failed:', err);
-      const short =
-        err?.shortMessage ||
-        err?.cause?.shortMessage ||
-        err?.cause?.details ||
-        err?.message ||
-        'Transaction failed';
-      setErrorMessage(short);
-      setStatus('error');
-    }
+      })
+    );
   };
 
   const buttonLabel = (() => {
-    if (status === 'withdrawing') return 'Withdrawing…';
+    if (status === 'pending') return 'Withdrawing…';
     if (status === 'success') return 'Withdrawn ✔';
     if (status === 'error') return 'Try again';
     return 'Withdraw 50 USDC';
@@ -97,17 +61,11 @@ export function WithdrawPanel({ onAfterTx }: WithdrawPanelProps) {
         <code>withdraw</code> entrypoint.
       </p>
 
-      {errorMessage && (
-        <div className="alert alert-danger py-2">
-          <strong>Withdraw error:</strong> {errorMessage}
-        </div>
-      )}
-
-      {status === 'success' && !errorMessage && (
-        <div className="alert alert-success py-2">
-          ✅ Withdraw succeeded. Balances refreshed.
-        </div>
-      )}
+      <TxStatusBanner
+        status={status}
+        errorMessage={errorMessage}
+        successMessage="✅ Withdraw succeeded. Balances refreshed."
+      />
 
       <button
         type="button"

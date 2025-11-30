@@ -1,37 +1,66 @@
 import marketMakerLedgerAbiJson from './abis/MarketMakerLedger.json';
 import ppUsdcAbiJson from './abis/PpUSDC.json';
+import lmsrAbiJson from './abis/LMSRMarketMaker.json';
+
 import deploymentsJson from '../../../PredictionPerpsContractsV2/deployments.json';
 
-// Type the imported deployments.json for safety (only the fields we need)
+// ---- Types that match your deployments.json ----
+
 interface CoreDeployment {
   chainId: string;
-  Ledger: string;
-  PpUSDC: string;
+  deployer: string;
   MockUSDC: string;
-  // Add more if you use them later (e.g., PositionERC20, Permit2)
+  MockAUSDC: string;
+  MockAavePool: string;
+  PpUSDC: string;
+  Ledger: string;
+  PositionERC20: string;
+  Permit2: string;
+}
+
+interface LmsrDeployment {
+  LMSRMarketMaker: string;
+  marketId: string;
+  marketName: string;
+  marketTicker: string;
 }
 
 interface Deployments {
   core: CoreDeployment;
-  // lmsr: {...} if needed later
+  lmsr: LmsrDeployment;
 }
 
 const deployments = deploymentsJson as Deployments;
 
-// Optional: Runtime check to ensure this is Sepolia (chainId 11155111)
+// Optional sanity check
 if (deployments.core.chainId !== '11155111') {
-  throw new Error(`Deployments file is for chain ${deployments.core.chainId}, but we expect Sepolia (11155111)`);
+  console.warn(
+    `⚠ Loaded deployments for chain ${deployments.core.chainId}, expected Sepolia (11155111).`
+  );
 }
+
+// ---- Addresses for the app ----
 
 export const CONTRACTS = {
   sepolia: {
-    ledger: deployments.core.Ledger,     // e.g., "0x098e80B116905AB8f73e82626B865b1668737686"
-    ppUSDC: deployments.core.PpUSDC,     // e.g., "0x108D319E4Ccde2782ff437Dc4DA48F94Ce4A25E6"
-    usdc: deployments.core.MockUSDC,     // e.g., "0xbA4692B57078599C6Ac540A8B9E39a3DF6660AE2" 👈 MockUSDC
+    deployer:     deployments.core.deployer,
+    ledger:       deployments.core.Ledger,
+    ppUSDC:       deployments.core.PpUSDC,
+    usdc:         deployments.core.MockUSDC,
+    ausdc:        deployments.core.MockAUSDC,
+    aavePool:     deployments.core.MockAavePool,
+    positionImpl: deployments.core.PositionERC20,
+    permit2:      deployments.core.Permit2,
+
+    lmsr:     deployments.lmsr.LMSRMarketMaker,
+    marketId: BigInt(deployments.lmsr.marketId),
   },
 } as const;
+
+// ---- ABIs ----
 
 export const ABIS = {
   ledger: (marketMakerLedgerAbiJson as any).abi,
   ppUSDC: (ppUsdcAbiJson as any).abi,
+  lmsr:   (lmsrAbiJson as any).abi,
 };

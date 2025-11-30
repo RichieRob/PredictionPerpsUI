@@ -7,7 +7,7 @@ import { Balances } from '../components/Balances';
 import { DepositPanel } from '../components/DepositPanel';
 import { WithdrawPanel } from '../components/WithdrawPanel';
 import { DevInfo } from '../components/DevInfo';
-import { Markets } from '../components/Markets'; // 👈 this was missing
+import { Markets } from '../components/Markets';
 
 const ERC20_ABI = [
   {
@@ -37,6 +37,7 @@ export default function HomePage() {
     query: {
       enabled: !!address,
     },
+    // ⬅ restore top-level watch (this is how you had it when it worked)
     watch: true,
   });
 
@@ -61,7 +62,10 @@ export default function HomePage() {
 
   // --- Markets ---
 
-  const { data: marketIdsRaw } = useReadContract({
+  const {
+    data: marketIdsRaw,
+    refetch: refetchMarkets,
+  } = useReadContract({
     address: ledger as `0x${string}`,
     abi: ABIS.ledger,
     functionName: 'getMarkets',
@@ -69,8 +73,15 @@ export default function HomePage() {
 
   const marketIds = (marketIdsRaw as bigint[] | undefined) || [];
 
-  const refreshBalances = async () => {
-    await Promise.all([refetchUsdc(), refetchPp()]);
+  // --- Unified after-tx handler for ALL tx paths (deposit / withdraw / buy) ---
+
+  const handleAfterTx = async () => {
+    await Promise.allSettled([
+      refetchUsdc(),
+      refetchPp(),
+      refetchMarkets(),
+      // add more refetchers here later (estimates, dev views, etc.)
+    ]);
   };
 
   return (
@@ -84,13 +95,13 @@ export default function HomePage() {
         <>
           <Balances usdcBalance={usdcBalance} ppBalance={ppBalance} />
 
-          <DepositPanel onAfterTx={refreshBalances} />
+          <DepositPanel onAfterTx={handleAfterTx} />
 
-          <WithdrawPanel onAfterTx={refreshBalances} />
+          <WithdrawPanel onAfterTx={handleAfterTx} />
         </>
       )}
 
-      <Markets marketIds={marketIds} />
+      <Markets marketIds={marketIds} onAfterTx={handleAfterTx} />
 
       <DevInfo ledger={ledger} ppUSDC={ppUSDC} usdc={usdc} />
     </div>

@@ -1,13 +1,17 @@
+// src/components/Markets.tsx
 'use client';
 
-import { useReadContract } from 'wagmi';
+import React, { useMemo } from 'react';
+import { useReadContract, useReadContracts } from 'wagmi';
 import { CONTRACTS, ABIS } from '../config/contracts';
+import { PositionPill } from './PositionPill';
 
 type MarketsProps = {
   marketIds: bigint[];
+  onAfterTx?: () => Promise<unknown> | void;
 };
 
-export function Markets({ marketIds }: MarketsProps) {
+export function Markets({ marketIds, onAfterTx }: MarketsProps) {
   return (
     <section className="mt-4">
       <h2 className="h5 mb-3">Markets</h2>
@@ -16,16 +20,27 @@ export function Markets({ marketIds }: MarketsProps) {
       )}
       <div className="list-group">
         {marketIds.map((id) => (
-          <MarketRow key={id.toString()} id={id} />
+          <MarketRow
+            key={id.toString()}
+            id={id}
+            onAfterTx={onAfterTx}
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function MarketRow({ id }: { id: bigint }) {
-  const { ledger } = CONTRACTS.sepolia;
+function MarketRow({
+  id,
+  onAfterTx,
+}: {
+  id: bigint;
+  onAfterTx?: () => Promise<unknown> | void;
+}) {
+  const { ledger, lmsr } = CONTRACTS.sepolia;
 
+  // --- Market name + ticker ---
   const { data: marketData } = useReadContract({
     address: ledger as `0x${string}`,
     abi: ABIS.ledger,
@@ -35,6 +50,7 @@ function MarketRow({ id }: { id: bigint }) {
 
   const [name, ticker] = (marketData || []) as [string, string];
 
+  // --- Positions for this market ---
   const { data: positionsRaw } = useReadContract({
     address: ledger as `0x${string}`,
     abi: ABIS.ledger,
@@ -43,6 +59,77 @@ function MarketRow({ id }: { id: bigint }) {
   });
 
   const positions = (positionsRaw as bigint[] | undefined) || [];
+
+  // --- Bundle ALL prices for this market (each position + OTHER) ---
+
+  const contracts = useMemo(
+    () => {
+      const cs: any[] = [];
+
+      // 1) one getBackPriceWad per position
+      positions.forEach((posId) => {
+        cs.push({
+          address: lmsr as `0x${string}`,
+          abi: ABIS.lmsr,
+          functionName: 'getBackPriceWad',
+          args: [id, posId],
+        });
+      });
+
+      // 2) one getReservePriceWad for OTHER
+      cs.push({
+        address: lmsr as `0x${string}`,
+        abi: ABIS.lmsr,
+        functionName: 'getReservePriceWad',
+        args: [id],
+      });
+
+      return cs;
+    },
+    [positions, lmsr, id]
+  );
+
+  const {
+    data: pricesData,
+    refetch: refetchMarketPrices,
+  } = useReadContracts({
+    contracts,
+    query: {
+      enabled: contracts.length > 0,
+      // you *can* add staleTime here later if needed
+    },
+  });
+
+  // Helper: get price label for a given position index in `positions`
+  const getPriceLabelForIndex = (idx: number): string => {
+    if (!pricesData || !pricesData[idx]) return '–';
+    const entry: any = pricesData[idx];
+    const wad = entry?.result as bigint | undefined;
+    if (wad === undefined) return '–';
+    const p = Number(wad) / 1e18;
+    if (!Number.isFinite(p)) return '–';
+    return `$${p.toFixed(3)}`;
+  };
+
+  // Reserve / OTHER is last entry in pricesData
+  let reserveLabel = '–';
+  let hasReserve = false;
+  if (pricesData && pricesData.length > 0) {
+    const reserveIdx = positions.length; // after all positions
+    const reserveEntry: any = pricesData[reserveIdx];
+    const reserveRaw = reserveEntry?.result as bigint | undefined;
+    if (reserveRaw !== undefined && reserveRaw > 0n) {
+      hasReserve = true;
+      const p = Number(reserveRaw) / 1e18;
+      if (Number.isFinite(p)) {
+        reserveLabel = `$${p.toFixed(3)}`;
+      }
+    }
+  }
+
+  const handleMarketPriceUpdate = async () => {
+    await refetchMarketPrices();
+  };
 
   return (
     <div className="list-group-item">
@@ -56,44 +143,41 @@ function MarketRow({ id }: { id: bigint }) {
         </span>
       </div>
 
-      {positions.length > 0 && (
+      {(positions.length > 0 || hasReserve) && (
         <ul className="list-inline mb-0">
-          {positions.map((posId) => (
-            <li
-              key={posId.toString()}
-              className="list-inline-item me-3 mb-1"
-            >
-              <PositionPill marketId={id} positionId={posId} />
+          {/* POSITIONS */}
+          {positions.map((posId, idx) => {
+            const priceLabel = getPriceLabelForIndex(idx);
+            return (
+              <li
+                key={posId.toString()}
+                className="list-inline-item me-3 mb-1"
+              >
+                <PositionPill
+                  marketId={id}
+                  positionId={posId}
+                  priceLabel={priceLabel}
+                  onAfterTx={onAfterTx}
+                  onMarketPriceUpdate={handleMarketPriceUpdate}
+                />
+              </li>
+            );
+          })}
+
+          {/* OTHER PRICE */}
+          {hasReserve && (
+            <li className="list-inline-item me-3 mb-1">
+              <span className="badge bg-light text-dark border">
+                <strong>OTHER</strong>{' '}
+                <span className="text-muted">Unlisted outcomes</span>{' '}
+                <span className="ms-1 text-primary fw-semibold">
+                  {reserveLabel}
+                </span>
+              </span>
             </li>
-          ))}
+          )}
         </ul>
       )}
     </div>
-  );
-}
-
-function PositionPill({
-  marketId,
-  positionId,
-}: {
-  marketId: bigint;
-  positionId: bigint;
-}) {
-  const { ledger } = CONTRACTS.sepolia;
-
-  const { data } = useReadContract({
-    address: ledger as `0x${string}`,
-    abi: ABIS.ledger,
-    functionName: 'getPositionDetails',
-    args: [marketId, positionId],
-  });
-
-  const [name, ticker] = (data || []) as [string, string];
-
-  return (
-    <span className="badge bg-light text-dark border">
-      <strong>{ticker || positionId.toString()}</strong>{' '}
-      <span className="text-muted">{name}</span>
-    </span>
   );
 }

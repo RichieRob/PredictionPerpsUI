@@ -1,6 +1,7 @@
+// src/components/DepositPanel.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   useAccount,
   useWriteContract,
@@ -10,6 +11,8 @@ import {
 } from 'wagmi';
 import { parseUnits, hexToSignature, type Hex } from 'viem';
 import { CONTRACTS, ABIS } from '../config/contracts';
+import { useLedgerTx } from '../hooks/useLedgerTx';
+import { TxStatusBanner } from './TxStatusBanner';
 
 const ERC20_PERMIT_ABI = [
   {
@@ -25,8 +28,6 @@ type DepositPanelProps = {
   onAfterTx?: () => Promise<unknown> | void;
 };
 
-type Status = 'idle' | 'signing' | 'depositing' | 'success' | 'error';
-
 export function DepositPanel({ onAfterTx }: DepositPanelProps) {
   const { address } = useAccount();
   const chainId = useChainId();
@@ -37,21 +38,18 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
   const chainKey = 'sepolia' as const;
   const { ledger, usdc } = CONTRACTS[chainKey];
 
-  const [status, setStatus] = useState<Status>('idle');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Unified tx state (pending / success / error + banner text)
+  const {
+    status,
+    errorMessage,
+    setErrorMessage,
+    runTx,
+  } = useLedgerTx({ onAfterTx });
 
-  const isBusy = status === 'signing' || status === 'depositing';
+  // Amount input (in USDC)
+  const [amountInput, setAmountInput] = useState<string>('100');
 
-  // 🔁 Auto-reset status after success/error so the button goes back to normal
-  useEffect(() => {
-    if (status === 'success' || status === 'error') {
-      const t = setTimeout(() => {
-        setStatus('idle');
-        setErrorMessage(null);
-      }, 3000);
-      return () => clearTimeout(t);
-    }
-  }, [status]);
+  const isBusy = status === 'pending';
 
   const handleDeposit = async () => {
     if (!address) {
@@ -62,14 +60,20 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
       setErrorMessage('RPC or wallet client not ready.');
       return;
     }
-    if (isBusy) return;
 
-    setErrorMessage(null);
-    setStatus('signing');
+    const parsed = Number(amountInput);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setErrorMessage('Enter a valid amount.');
+      return;
+    }
 
     try {
-      const amount = parseUnits('100', 6); // 100 Mock USDC
+      setErrorMessage(null);
 
+      // 1) Build the amount (6 decimals)
+      const amount = parseUnits(amountInput, 6); // e.g. "100" -> 100e6
+
+      // 2) Read nonce for permit
       const nonce = (await publicClient.readContract({
         address: usdc as `0x${string}`,
         abi: ERC20_PERMIT_ABI,
@@ -78,9 +82,10 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
       })) as bigint;
 
       const deadline = BigInt(
-        Math.floor(Date.now() / 1000) + 60 * 10 // 10 minutes from now
+        Math.floor(Date.now() / 1000) + 60 * 10 // 10 minutes
       );
 
+      // 3) EIP-2612 domain + types + message
       const domain = {
         name: 'Mock USDC',
         version: '1',
@@ -106,6 +111,7 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
         deadline,
       };
 
+      // 4) Have the wallet sign the permit
       const signature = await walletClient.signTypedData({
         account: address,
         domain,
@@ -124,32 +130,23 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
         s,
       };
 
-      setStatus('depositing');
-
-      const txHash = await writeContractAsync({
-        address: ledger as `0x${string}`,
-        abi: ABIS.ledger,
-        functionName: 'deposit',
-        args: [
-          address, // to
-          amount, // amount
-          0n, // minUSDCDeposited
-          1, // mode = 1 (EIP-2612)
-          eipPermit,
-          '0x', // permit2Calldata (unused)
-        ],
-        gas: 5_000_000n,
-      });
-
-      console.log('✅ deposit tx hash:', txHash);
-
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
-
-      setStatus('success');
-
-      if (onAfterTx) {
-        await onAfterTx();
-      }
+      // 5) Send the on-chain deposit tx via the unified tx helper
+      await runTx(() =>
+        writeContractAsync({
+          address: ledger as `0x${string}`,
+          abi: ABIS.ledger,
+          functionName: 'deposit',
+          args: [
+            address, // to
+            amount,  // amount
+            0n,      // minUSDCDeposited
+            1,       // mode = 1 (EIP-2612)
+            eipPermit,
+            '0x',    // permit2Calldata (unused)
+          ],
+          gas: 5_000_000n,
+        })
+      );
     } catch (err: any) {
       console.error('❌ Deposit failed:', err);
       const short =
@@ -159,56 +156,57 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
         err?.message ||
         'Transaction failed';
       setErrorMessage(short);
-      setStatus('error');
     }
   };
 
   const buttonLabel = (() => {
-    if (status === 'signing') return 'Sign permit…';
-    if (status === 'depositing') return 'Depositing…';
+    if (status === 'pending') return 'Sign & deposit…';
     if (status === 'success') return 'Deposited ✔';
     if (status === 'error') return 'Try again';
-    return 'Deposit 100 USDC (permit)';
+    return 'Deposit';
   })();
 
   return (
     <section className="mb-4">
       <h2 className="h5">Deposit</h2>
       <p className="mb-2 text-muted">
-        This uses an <code>permit</code> (EIP-2612): you sign once, then we send
-        a single <code>deposit</code> transaction using that signature.
-        <br />
-        Slight adjustment to contracts needed to support Permit2.
+        Uses an <code>permit</code> (EIP-2612): you sign once, then we send a
+        single <code>deposit</code> transaction.
       </p>
 
-      {errorMessage && (
-        <div className="alert alert-danger py-2">
-          <strong>Deposit error:</strong> {errorMessage}
-        </div>
-      )}
+      <TxStatusBanner
+        status={status}
+        errorMessage={errorMessage}
+        successMessage="✅ Deposit succeeded. Balances refreshed."
+      />
 
-      {status === 'success' && !errorMessage && (
-        <div className="alert alert-success py-2">
-          ✅ Deposit succeeded. Balances refreshed.
-        </div>
-      )}
-
-      <button
-        type="button"
-        className="btn btn-primary btn-sm d-inline-flex align-items-center"
-        onClick={handleDeposit}
-        disabled={isBusy}
-      >
-        {isBusy && (
-          <span
-            className="spinner-border spinner-border-sm me-2"
-            role="status"
-            aria-hidden="true"
-          />
-        )}
-        {buttonLabel}
-      </button>
+      <div className="d-flex align-items-center gap-2">
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={amountInput}
+          onChange={(e) => setAmountInput(e.target.value)}
+          className="form-control form-control-sm"
+          style={{ width: '120px' }}
+          placeholder="Amount (USDC)"
+        />
+        <button
+          type="button"
+          className="btn btn-primary btn-sm d-inline-flex align-items-center"
+          onClick={handleDeposit}
+          disabled={isBusy}
+        >
+          {isBusy && (
+            <span
+              className="spinner-border spinner-border-sm me-2"
+              role="status"
+              aria-hidden="true"
+            />
+          )}
+          {buttonLabel}
+        </button>
+      </div>
     </section>
   );
 }
-  
