@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   useAccount,
   useWriteContract,
@@ -42,6 +42,17 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
 
   const isBusy = status === 'signing' || status === 'depositing';
 
+  // 🔁 Auto-reset status after success/error so the button goes back to normal
+  useEffect(() => {
+    if (status === 'success' || status === 'error') {
+      const t = setTimeout(() => {
+        setStatus('idle');
+        setErrorMessage(null);
+      }, 3000);
+      return () => clearTimeout(t);
+    }
+  }, [status]);
+
   const handleDeposit = async () => {
     if (!address) {
       setErrorMessage('Wallet not connected.');
@@ -57,7 +68,6 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
     setStatus('signing');
 
     try {
-      // --- 1) Prepare permit (EIP-2612) ---------------------------------
       const amount = parseUnits('100', 6); // 100 Mock USDC
 
       const nonce = (await publicClient.readContract({
@@ -72,8 +82,8 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
       );
 
       const domain = {
-        name: 'Mock USDC',      // matches your token name
-        version: '1',           // ERC20Permit default in OZ
+        name: 'Mock USDC',
+        version: '1',
         chainId,
         verifyingContract: usdc as `0x${string}`,
       };
@@ -109,12 +119,11 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
       const eipPermit = {
         value: amount,
         deadline,
-        v: Number(v), // uint8 on-chain
+        v: Number(v),
         r,
         s,
       };
 
-      // --- 2) Call deposit with mode = 1 (EIP-2612) ----------------------
       setStatus('depositing');
 
       const txHash = await writeContractAsync({
@@ -122,12 +131,12 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
         abi: ABIS.ledger,
         functionName: 'deposit',
         args: [
-          address,          // to
-          amount,           // amount
-          0n,               // minUSDCDeposited
-          1,                // mode = 1 (EIP-2612)
-          eipPermit,        // TypesPermit.EIP2612Permit
-          '0x',             // permit2Calldata (unused here)
+          address, // to
+          amount, // amount
+          0n, // minUSDCDeposited
+          1, // mode = 1 (EIP-2612)
+          eipPermit,
+          '0x', // permit2Calldata (unused)
         ],
         gas: 5_000_000n,
       });
@@ -168,8 +177,8 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
       <p className="mb-2 text-muted">
         This uses an <code>permit</code> (EIP-2612): you sign once, then we send
         a single <code>deposit</code> transaction using that signature.
-      <br></br>
-        Slight adjustment to contracts needed to support Permit2. 
+        <br />
+        Slight adjustment to contracts needed to support Permit2.
       </p>
 
       {errorMessage && (
@@ -202,3 +211,4 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
     </section>
   );
 }
+  

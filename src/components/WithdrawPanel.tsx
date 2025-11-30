@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount, useWriteContract, usePublicClient } from 'wagmi';
 import { parseUnits } from 'viem';
 import { CONTRACTS, ABIS } from '../config/contracts';
@@ -23,6 +23,17 @@ export function WithdrawPanel({ onAfterTx }: WithdrawPanelProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isBusy = status === 'withdrawing';
+
+  // 🔁 Auto-reset like DepositPanel
+  useEffect(() => {
+    if (status === 'success' || status === 'error') {
+      const t = setTimeout(() => {
+        setStatus('idle');
+        setErrorMessage(null);
+      }, 3000);
+      return () => clearTimeout(t);
+    }
+  }, [status]);
 
   const handleWithdraw = async () => {
     if (!address) {
