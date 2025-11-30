@@ -5,7 +5,9 @@ import { useAccount, useReadContract } from 'wagmi';
 import { CONTRACTS, ABIS } from '../config/contracts';
 import { Balances } from '../components/Balances';
 import { DepositPanel } from '../components/DepositPanel';
-import { Markets } from '../components/Markets';
+import { WithdrawPanel } from '../components/WithdrawPanel';
+import { DevInfo } from '../components/DevInfo';
+import { Markets } from '../components/Markets'; // 👈 this was missing
 
 const ERC20_ABI = [
   {
@@ -35,7 +37,7 @@ export default function HomePage() {
     query: {
       enabled: !!address,
     },
-    watch: true, // 👈 optional
+    watch: true,
   });
 
   const {
@@ -49,7 +51,7 @@ export default function HomePage() {
     query: {
       enabled: !!address,
     },
-    watch: true, // 👈 optional
+    watch: true,
   });
 
   const ppBalance =
@@ -67,6 +69,10 @@ export default function HomePage() {
 
   const marketIds = (marketIdsRaw as bigint[] | undefined) || [];
 
+  const refreshBalances = async () => {
+    await Promise.all([refetchUsdc(), refetchPp()]);
+  };
+
   return (
     <div className="container py-4">
       <header className="d-flex justify-content-between align-items-center mb-4">
@@ -78,15 +84,15 @@ export default function HomePage() {
         <>
           <Balances usdcBalance={usdcBalance} ppBalance={ppBalance} />
 
-          <DepositPanel
-            onAfterTx={async () => {
-              await Promise.all([refetchUsdc(), refetchPp()]);
-            }}
-          />
+          <DepositPanel onAfterTx={refreshBalances} />
+
+          <WithdrawPanel onAfterTx={refreshBalances} />
         </>
       )}
 
       <Markets marketIds={marketIds} />
+
+      <DevInfo ledger={ledger} ppUSDC={ppUSDC} usdc={usdc} />
     </div>
   );
 }
