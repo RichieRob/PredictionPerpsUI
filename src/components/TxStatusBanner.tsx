@@ -7,13 +7,13 @@ type Props = {
   successMessage: string;
 };
 
-export function TxStatusBanner({ status, errorMessage, successMessage }: Props) {
+export function TxStatusBanner({
+  status,
+  errorMessage,
+  successMessage,
+}: Props) {
   if (status === 'success' && !errorMessage) {
-    return (
-      <div className="alert alert-success py-2">
-        {successMessage}
-      </div>
-    );
+    return <div className="alert alert-success py-2">{successMessage}</div>;
   }
 
   if (status === 'error' && errorMessage) {

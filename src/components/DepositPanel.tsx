@@ -38,7 +38,6 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
   const chainKey = 'sepolia' as const;
   const { ledger, usdc } = CONTRACTS[chainKey];
 
-  // Unified tx state (pending / success / error + banner text)
   const {
     status,
     errorMessage,
@@ -46,9 +45,7 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
     runTx,
   } = useLedgerTx({ onAfterTx });
 
-  // Amount input (in USDC)
   const [amountInput, setAmountInput] = useState<string>('100');
-
   const isBusy = status === 'pending';
 
   const handleDeposit = async () => {
@@ -70,10 +67,8 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
     try {
       setErrorMessage(null);
 
-      // 1) Build the amount (6 decimals)
-      const amount = parseUnits(amountInput, 6); // e.g. "100" -> 100e6
+      const amount = parseUnits(amountInput, 6);
 
-      // 2) Read nonce for permit
       const nonce = (await publicClient.readContract({
         address: usdc as `0x${string}`,
         abi: ERC20_PERMIT_ABI,
@@ -85,7 +80,6 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
         Math.floor(Date.now() / 1000) + 60 * 10 // 10 minutes
       );
 
-      // 3) EIP-2612 domain + types + message
       const domain = {
         name: 'Mock USDC',
         version: '1',
@@ -111,7 +105,6 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
         deadline,
       };
 
-      // 4) Have the wallet sign the permit
       const signature = await walletClient.signTypedData({
         account: address,
         domain,
@@ -130,7 +123,6 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
         s,
       };
 
-      // 5) Send the on-chain deposit tx via the unified tx helper
       await runTx(() =>
         writeContractAsync({
           address: ledger as `0x${string}`,
@@ -138,11 +130,11 @@ export function DepositPanel({ onAfterTx }: DepositPanelProps) {
           functionName: 'deposit',
           args: [
             address, // to
-            amount,  // amount
-            0n,      // minUSDCDeposited
-            1,       // mode = 1 (EIP-2612)
+            amount, // amount
+            0n, // minUSDCDeposited
+            1, // mode = 1 (EIP-2612)
             eipPermit,
-            '0x',    // permit2Calldata (unused)
+            '0x', // permit2Calldata (unused)
           ],
           gas: 5_000_000n,
         })

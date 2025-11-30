@@ -7,12 +7,12 @@ import { useResettableStatus } from './useResettableStatus';
 export type TxStatus = 'idle' | 'pending' | 'success' | 'error';
 
 type UseLedgerTxArgs = {
-  // Global after-tx handler (e.g. refresh top-level balances in page.tsx)
+  // Global after-tx handler (e.g. refresh top-level balances / markets)
   onAfterTx?: () => Promise<unknown> | void;
 };
 
 type RunTxOptions = {
-  // Extra “local” refreshes for this specific component (e.g. position balance, price)
+  // Extra “local” refreshes for this specific component (e.g. position balance, market prices)
   onLocalAfterTx?: () => Promise<unknown> | void;
 };
 
@@ -44,12 +44,12 @@ export function useLedgerTx({ onAfterTx }: UseLedgerTxArgs) {
 
       await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-      // First run any local per-component refetches
+      // 1) Local component-level refresh
       if (options?.onLocalAfterTx) {
         await options.onLocalAfterTx();
       }
 
-      // Then run the global handler from page.tsx (refresh top-level balances, markets, etc.)
+      // 2) Global app-level refresh from page.tsx
       if (onAfterTx) {
         await onAfterTx();
       }

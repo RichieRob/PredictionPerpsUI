@@ -20,11 +20,7 @@ export function Markets({ marketIds, onAfterTx }: MarketsProps) {
       )}
       <div className="list-group">
         {marketIds.map((id) => (
-          <MarketRow
-            key={id.toString()}
-            id={id}
-            onAfterTx={onAfterTx}
-          />
+          <MarketRow key={id.toString()} id={id} onAfterTx={onAfterTx} />
         ))}
       </div>
     </section>
@@ -61,33 +57,27 @@ function MarketRow({
   const positions = (positionsRaw as bigint[] | undefined) || [];
 
   // --- Bundle ALL prices for this market (each position + OTHER) ---
+  const contracts = useMemo(() => {
+    const cs: any[] = [];
 
-  const contracts = useMemo(
-    () => {
-      const cs: any[] = [];
-
-      // 1) one getBackPriceWad per position
-      positions.forEach((posId) => {
-        cs.push({
-          address: lmsr as `0x${string}`,
-          abi: ABIS.lmsr,
-          functionName: 'getBackPriceWad',
-          args: [id, posId],
-        });
-      });
-
-      // 2) one getReservePriceWad for OTHER
+    positions.forEach((posId) => {
       cs.push({
         address: lmsr as `0x${string}`,
         abi: ABIS.lmsr,
-        functionName: 'getReservePriceWad',
-        args: [id],
+        functionName: 'getBackPriceWad',
+        args: [id, posId],
       });
+    });
 
-      return cs;
-    },
-    [positions, lmsr, id]
-  );
+    cs.push({
+      address: lmsr as `0x${string}`,
+      abi: ABIS.lmsr,
+      functionName: 'getReservePriceWad',
+      args: [id],
+    });
+
+    return cs;
+  }, [positions, lmsr, id]);
 
   const {
     data: pricesData,
@@ -96,11 +86,9 @@ function MarketRow({
     contracts,
     query: {
       enabled: contracts.length > 0,
-      // you *can* add staleTime here later if needed
     },
   });
 
-  // Helper: get price label for a given position index in `positions`
   const getPriceLabelForIndex = (idx: number): string => {
     if (!pricesData || !pricesData[idx]) return '–';
     const entry: any = pricesData[idx];
@@ -111,11 +99,11 @@ function MarketRow({
     return `$${p.toFixed(3)}`;
   };
 
-  // Reserve / OTHER is last entry in pricesData
+  // Reserve / OTHER is last entry
   let reserveLabel = '–';
   let hasReserve = false;
   if (pricesData && pricesData.length > 0) {
-    const reserveIdx = positions.length; // after all positions
+    const reserveIdx = positions.length;
     const reserveEntry: any = pricesData[reserveIdx];
     const reserveRaw = reserveEntry?.result as bigint | undefined;
     if (reserveRaw !== undefined && reserveRaw > 0n) {
@@ -145,7 +133,6 @@ function MarketRow({
 
       {(positions.length > 0 || hasReserve) && (
         <ul className="list-inline mb-0">
-          {/* POSITIONS */}
           {positions.map((posId, idx) => {
             const priceLabel = getPriceLabelForIndex(idx);
             return (
@@ -164,7 +151,6 @@ function MarketRow({
             );
           })}
 
-          {/* OTHER PRICE */}
           {hasReserve && (
             <li className="list-inline-item me-3 mb-1">
               <span className="badge bg-light text-dark border">

@@ -10,8 +10,9 @@ import {
 import { CONTRACTS, ABIS } from '../config/contracts';
 import { useLedgerTx } from '../hooks/useLedgerTx';
 import { TxStatusBanner } from './TxStatusBanner';
+import { addTokenToMetaMask } from '../utils/addTokenToMetaMask';
 
-// Minimal ERC20 ABI for balanceOf
+// Minimal ERC20 ABI for balanceOf + symbol
 const ERC20_ABI = [
   {
     type: 'function',
@@ -19,6 +20,13 @@ const ERC20_ABI = [
     stateMutability: 'view',
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'symbol',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }],
   },
 ] as const;
 
@@ -41,7 +49,7 @@ export function PositionPill({
   const { ledger } = CONTRACTS.sepolia;
   const { writeContractAsync } = useWriteContract();
 
-  // --- Name + ticker from Ledger ---
+  // --- Name + *position* ticker from Ledger ---
   const { data: posMeta } = useReadContract({
     address: ledger as `0x${string}`,
     abi: ABIS.ledger,
@@ -49,9 +57,9 @@ export function PositionPill({
     args: [marketId, positionId],
   });
 
-  const [name, ticker] = (posMeta || []) as [string, string];
+  const [name, positionTicker] = (posMeta || []) as [string, string];
 
-  // --- Position ERC20 address ---
+  // --- Position ERC20 address from Ledger ---
   const { data: tokenAddressRaw } = useReadContract({
     address: ledger as `0x${string}`,
     abi: ABIS.ledger,
@@ -62,24 +70,37 @@ export function PositionPill({
   const tokenAddress =
     (tokenAddressRaw as `0x${string}` | undefined) || undefined;
 
-  // --- Balance of this position token for the connected wallet ---
+  // --- Balance + ERC20.symbol() from the actual Position token ---
   const {
-    data: balanceRaw,
-    refetch: refetchBalance,
+    data: erc20Data,
+    refetch: refetchErc20Data,
   } = useReadContract({
     address: tokenAddress as `0x${string}` | undefined,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
+    // NOTE: we only call balanceOf via abi, symbol is separate below.
+    // We'll read symbol via a second call so wagmi doesn't get confused.
     args: address && tokenAddress ? [address] : undefined,
     query: {
       enabled: !!address && !!tokenAddress,
     },
-    watch: true,
   });
 
+  const { data: tokenSymbolRaw } = useReadContract({
+    address: tokenAddress as `0x${string}` | undefined,
+    abi: ERC20_ABI,
+    functionName: 'symbol',
+    args: [],
+    query: {
+      enabled: !!tokenAddress,
+    },
+  });
+
+  const tokenSymbol = tokenSymbolRaw as string | undefined;
+
   let balanceLabel = '0';
-  if (balanceRaw !== undefined) {
-    const bal = Number(balanceRaw) / 1e6; // PositionERC20.decimals() = 6
+  if (erc20Data !== undefined) {
+    const bal = Number(erc20Data) / 1e6; // PositionERC20.decimals() = 6
     balanceLabel = bal.toFixed(0);
   }
 
@@ -93,6 +114,11 @@ export function PositionPill({
 
   const isBusy = status === 'pending';
   const [size, setSize] = useState<string>('1'); // 1 USDC default
+
+  // --- MetaMask "add token" feedback ---
+  const [addStatus, setAddStatus] = useState<'idle' | 'added' | 'failed'>(
+    'idle',
+  );
 
   const handleBuy = async () => {
     if (!address) {
@@ -120,21 +146,46 @@ export function PositionPill({
             positionId,
             true, // isBack
             usdcIn,
-            0n,   // minTokensOut
+            0n, // minTokensOut
           ],
         }),
       {
         // 🔁 Local follow-up after tx:
         //  - refresh this position balance
+        //  - refresh symbol (just in case, though it shouldn't change)
         //  - ask MarketRow to refresh ALL prices (this position + siblings + OTHER)
         onLocalAfterTx: async () => {
           await Promise.allSettled([
-            refetchBalance(),
+            refetchErc20Data(),
             onMarketPriceUpdate?.(),
           ]);
         },
-      }
+      },
     );
+  };
+
+  const handleAddToMetaMask = async () => {
+    if (!tokenAddress) {
+      console.log('[PositionPill] No tokenAddress for this position yet.');
+      setAddStatus('failed');
+      return;
+    }
+
+    if (!tokenSymbol) {
+      console.log(
+        '[PositionPill] No tokenSymbol yet – ERC20.symbol() not loaded.',
+      );
+      setAddStatus('failed');
+      return;
+    }
+
+    const ok = await addTokenToMetaMask({
+      address: tokenAddress,
+      symbol: tokenSymbol, // 👈 EXACT contract symbol, e.g. "POS1-TEST"
+      decimals: 6,
+    });
+
+    setAddStatus(ok ? 'added' : 'failed');
   };
 
   const buttonLabel = (() => {
@@ -148,7 +199,7 @@ export function PositionPill({
     <span className="badge bg-light text-dark border p-2">
       <div className="d-flex flex-column gap-1">
         <div>
-          <strong>{ticker || positionId.toString()}</strong>{' '}
+          <strong>{positionTicker || positionId.toString()}</strong>{' '}
           <span className="text-muted">{name}</span>{' '}
           <span className="ms-1 text-primary fw-semibold">
             {priceLabel}
@@ -175,21 +226,39 @@ export function PositionPill({
             style={{ width: '80px' }}
             placeholder="USDC"
           />
+        <button
+          type="button"
+          className="btn btn-sm btn-primary"
+          onClick={handleBuy}
+          disabled={isBusy}
+        >
+          {isBusy && (
+            <span
+              className="spinner-border spinner-border-sm me-1"
+              role="status"
+              aria-hidden="true"
+            />
+          )}
+          {buttonLabel}
+        </button>
+
           <button
             type="button"
-            className="btn btn-sm btn-primary"
-            onClick={handleBuy}
-            disabled={isBusy}
+            className="btn btn-sm btn-outline-secondary"
+            onClick={handleAddToMetaMask}
+            disabled={!tokenAddress}
           >
-            {isBusy && (
-              <span
-                className="spinner-border spinner-border-sm me-1"
-                role="status"
-                aria-hidden="true"
-              />
-            )}
-            {buttonLabel}
+            Add to MetaMask
           </button>
+
+          {addStatus === 'added' && (
+            <small className="text-success">Added ✓</small>
+          )}
+          {addStatus === 'failed' && (
+            <small className="text-muted">
+              Couldn&apos;t add (maybe cancelled)
+            </small>
+          )}
         </div>
       </div>
     </span>

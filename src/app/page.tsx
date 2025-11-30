@@ -1,3 +1,4 @@
+// src/app/page.tsx
 'use client';
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -24,7 +25,7 @@ export default function HomePage() {
   const chainKey = 'sepolia' as const;
   const { ledger, ppUSDC, usdc } = CONTRACTS[chainKey];
 
-  // --- Balances ---
+  // --- Wallet balances (Mock USDC + ppUSDC) ---
 
   const {
     data: ppBalanceRaw,
@@ -37,7 +38,6 @@ export default function HomePage() {
     query: {
       enabled: !!address,
     },
-    // ⬅ restore top-level watch (this is how you had it when it worked)
     watch: true,
   });
 
@@ -60,7 +60,7 @@ export default function HomePage() {
   const usdcBalance =
     usdcBalanceRaw !== undefined ? Number(usdcBalanceRaw) / 1e6 : 0;
 
-  // --- Markets ---
+  // --- Market list ---
 
   const {
     data: marketIdsRaw,
@@ -73,14 +73,14 @@ export default function HomePage() {
 
   const marketIds = (marketIdsRaw as bigint[] | undefined) || [];
 
-  // --- Unified after-tx handler for ALL tx paths (deposit / withdraw / buy) ---
+  // --- Global after-tx handler for ALL tx paths ---
 
   const handleAfterTx = async () => {
     await Promise.allSettled([
       refetchUsdc(),
       refetchPp(),
       refetchMarkets(),
-      // add more refetchers here later (estimates, dev views, etc.)
+      // future: dev views, estimates, etc.
     ]);
   };
 
@@ -94,9 +94,7 @@ export default function HomePage() {
       {address && (
         <>
           <Balances usdcBalance={usdcBalance} ppBalance={ppBalance} />
-
           <DepositPanel onAfterTx={handleAfterTx} />
-
           <WithdrawPanel onAfterTx={handleAfterTx} />
         </>
       )}
@@ -107,3 +105,4 @@ export default function HomePage() {
     </div>
   );
 }
+  
