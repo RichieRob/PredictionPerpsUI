@@ -9,6 +9,7 @@ import { TxStatusBanner } from './TxStatusBanner';
 import { addTokenToMetaMask } from '../utils/addTokenToMetaMask';
 import { PriceBar } from './PriceBar';
 
+
 type PositionPillProps = {
   marketId: bigint;
   positionId: bigint;
