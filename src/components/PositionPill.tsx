@@ -45,10 +45,12 @@ export function PositionPill({
     setErrorMessage,
   } = useLedgerTx({ onAfterTx });
 
-  const [size, setSize] = useState<string>('1');
+  // 👉 default blank
+  const [size, setSize] = useState<string>('');
+  const [lastAction, setLastAction] = useState<'back' | 'lay' | null>(null);
   const isBusy = status === 'pending';
 
-  const handleBuy = async () => {
+  const executeTrade = async (isBack: boolean, action: 'back' | 'lay') => {
     if (!address) {
       setErrorMessage('Wallet not connected.');
       return;
@@ -60,21 +62,38 @@ export function PositionPill({
     const USDC_DECIMALS = 6;
     const usdcIn = BigInt(Math.round(parsed * 10 ** USDC_DECIMALS));
 
-    await runTx(() =>
-      writeContractAsync({
-        address: ledger as `0x${string}`,
-        abi: ABIS.ledger,
-        functionName: 'buyForppUSDC',
-        args: [
-          lmsr as `0x${string}`,
-          marketId,
-          positionId,
-          true,
-          usdcIn,
-          0n,
-        ],
-      })
+    setLastAction(action);
+
+    await runTx(
+      () =>
+        writeContractAsync({
+          address: ledger as `0x${string}`,
+          abi: ABIS.ledger,
+          functionName: 'buyForppUSDC',
+          args: [
+            lmsr as `0x${string}`,
+            marketId,
+            positionId,
+            isBack,   // 👈 true = back, false = lay
+            usdcIn,
+            0n,
+          ],
+        }),
+      {
+        // 👉 clear the input locally after tx success
+        onLocalAfterTx: async () => {
+          setSize('');
+        },
+      }
     );
+  };
+
+  const handleBack = async () => {
+    await executeTrade(true, 'back');
+  };
+
+  const handleLay = async () => {
+    await executeTrade(false, 'lay');
   };
 
   const handleAddToMetaMask = async () => {
@@ -105,11 +124,18 @@ export function PositionPill({
     });
   };
 
-  const buttonLabel = (() => {
-    if (status === 'pending') return 'Buying…';
-    if (status === 'success') return 'Bought ✔';
-    if (status === 'error') return 'Try again';
-    return 'Buy';
+  const backButtonLabel = (() => {
+    if (status === 'pending' && lastAction === 'back') return 'Backing...';
+    if (status === 'success' && lastAction === 'back') return 'Backed ✔';
+    if (status === 'error' && lastAction === 'back') return 'Try again';
+    return 'Back';
+  })();
+
+  const layButtonLabel = (() => {
+    if (status === 'pending' && lastAction === 'lay') return 'Laying...';
+    if (status === 'success' && lastAction === 'lay') return 'Laid ✔';
+    if (status === 'error' && lastAction === 'lay') return 'Try again';
+    return 'Lay';
   })();
 
   const balanceLabel = Number.isFinite(balance)
@@ -150,8 +176,10 @@ export function PositionPill({
           size={size}
           setSize={setSize}
           isBusy={isBusy}
-          buttonLabel={buttonLabel}
-          onBuy={handleBuy}
+          backButtonLabel={backButtonLabel}
+          layButtonLabel={layButtonLabel}
+          onBack={handleBack}
+          onLay={handleLay}
           status={status}
           errorMessage={errorMessage}
         />
@@ -171,8 +199,10 @@ type TxSectionProps = {
   size: string;
   setSize: (v: string) => void;
   isBusy: boolean;
-  buttonLabel: string;
-  onBuy: () => void;
+  backButtonLabel: string;
+  layButtonLabel: string;
+  onBack: () => void;
+  onLay: () => void;
   status: 'idle' | 'pending' | 'success' | 'error';
   errorMessage: string | null;
 };
@@ -181,8 +211,10 @@ function TransactionSection({
   size,
   setSize,
   isBusy,
-  buttonLabel,
-  onBuy,
+  backButtonLabel,
+  layButtonLabel,
+  onBack,
+  onLay,
   status,
   errorMessage,
 }: TxSectionProps) {
@@ -191,7 +223,7 @@ function TransactionSection({
       <TxStatusBanner
         status={status}
         errorMessage={errorMessage}
-        successMessage="✅ Buy succeeded. Balances refreshed."
+        successMessage="✅ Trade succeeded. Balances refreshed."
       />
 
       <div className="d-flex justify-content-end align-items-center gap-2 mt-1">
@@ -202,14 +234,14 @@ function TransactionSection({
           value={size}
           onChange={(e) => setSize(e.target.value)}
           className="form-control form-control-sm"
-          style={{ width: '80px' }}
-          placeholder="USDC"
+          style={{ width: '100px' }}
+          placeholder="ppUSDC"
         />
 
         <button
           type="button"
           className="btn btn-sm btn-primary"
-          onClick={onBuy}
+          onClick={onBack}
           disabled={isBusy}
         >
           {isBusy && (
@@ -219,7 +251,23 @@ function TransactionSection({
               aria-hidden="true"
             />
           )}
-          {buttonLabel}
+          {backButtonLabel}
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-sm btn-outline-primary"
+          onClick={onLay}
+          disabled={isBusy}
+        >
+          {isBusy && (
+            <span
+              className="spinner-border spinner-border-sm me-1"
+              role="status"
+              aria-hidden="true"
+            />
+          )}
+          {layButtonLabel}
         </button>
       </div>
     </div>

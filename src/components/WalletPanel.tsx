@@ -30,12 +30,6 @@ type WalletPanelProps = {
   onAfterTx?: () => Promise<unknown> | void;
 };
 
-/**
- * Unified panel for:
- * - Showing wallet USDC vs ledger ppUSDC
- * - Moving value Wallet → Ledger (deposit)
- * - Moving value Ledger → Wallet (withdraw)
- */
 export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelProps) {
   const { address } = useAccount();
   const chainId = useChainId();
@@ -53,8 +47,9 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
     runTx,
   } = useLedgerTx({ onAfterTx });
 
-  const [depositAmount, setDepositAmount] = useState<string>('100');
-  const [withdrawAmount, setWithdrawAmount] = useState<string>('50');
+  // 👉 default blank
+  const [depositAmount, setDepositAmount] = useState<string>('');
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
 
   const isBusy = status === 'pending';
 
@@ -89,7 +84,7 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
       })) as bigint;
 
       const deadline = BigInt(
-        Math.floor(Date.now() / 1000) + 60 * 10 // 10 minutes
+        Math.floor(Date.now() / 1000) + 60 * 10
       );
 
       const domain = {
@@ -135,21 +130,28 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
         s,
       };
 
-      await runTx(() =>
-        writeContractAsync({
-          address: ledger as `0x${string}`,
-          abi: ABIS.ledger,
-          functionName: 'deposit',
-          args: [
-            address, // to
-            amount,  // amount
-            0n,      // minUSDCDeposited
-            1,       // mode = 1 (EIP-2612)
-            eipPermit,
-            '0x',    // permit2Calldata (unused)
-          ],
-          gas: 5_000_000n,
-        })
+      await runTx(
+        () =>
+          writeContractAsync({
+            address: ledger as `0x${string}`,
+            abi: ABIS.ledger,
+            functionName: 'deposit',
+            args: [
+              address,
+              amount,
+              0n,
+              1,
+              eipPermit,
+              '0x',
+            ],
+            gas: 5_000_000n,
+          }),
+        {
+          // 👉 clear input after successful deposit
+          onLocalAfterTx: async () => {
+            setDepositAmount('');
+          },
+        }
       );
     } catch (err: any) {
       console.error('❌ Deposit failed:', err);
@@ -181,14 +183,21 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
       setErrorMessage(null);
       const amount = parseUnits(withdrawAmount, 6);
 
-      await runTx(() =>
-        writeContractAsync({
-          address: ledger as `0x${string}`,
-          abi: ABIS.ledger,
-          functionName: 'withdraw',
-          args: [amount, address],
-          gas: 3_000_000n,
-        })
+      await runTx(
+        () =>
+          writeContractAsync({
+            address: ledger as `0x${string}`,
+            abi: ABIS.ledger,
+            functionName: 'withdraw',
+            args: [amount, address],
+            gas: 3_000_000n,
+          }),
+        {
+          // 👉 clear input after successful withdraw
+          onLocalAfterTx: async () => {
+            setWithdrawAmount('');
+          },
+        }
       );
     } catch (err: any) {
       console.error('❌ Withdraw failed:', err);
@@ -219,19 +228,14 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
   return (
     <section className="mb-4">
       <h2 className="h5 mb-1">Wallet</h2>
-      <p className="mb-2 text-muted">
-
-      </p>
+      <p className="mb-2 text-muted"></p>
 
       <div className="border rounded p-3">
-        {/* Balances row */}
         <div className="d-flex flex-column flex-md-row justify-content-between mb-3">
           <div className="mb-2 mb-md-0">
-          
             <strong>USDC:</strong> {usdcBalance.toFixed(2)}
           </div>
           <div>
-      
             <strong>ppUSDC:</strong> {ppBalance.toFixed(2)}
           </div>
         </div>
@@ -282,7 +286,7 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
           <div className="col-12 col-md-6">
             <div className="mb-1 fw-semibold">ppUSDC → USDC</div>
             <p className="text-muted small mb-2">
-            <code>Unwrap</code>
+              <code>Unwrap</code>
             </p>
             <div className="d-flex align-items-center gap-2">
               <input
