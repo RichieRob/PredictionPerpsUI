@@ -20,7 +20,7 @@ export function DevInfo({ ledger, ppUSDC, usdc }: DevInfoProps) {
           <code className="text-break">{ppUSDC}</code>
         </div>
         <div className="mb-0">
-          <strong>Mock USDC:</strong>{' '}
+          <strong>USDC:</strong>{' '}
           <code className="text-break">{usdc}</code>
         </div>
       </div>

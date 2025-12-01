@@ -2,92 +2,42 @@
 'use client';
 
 import React, { useState } from 'react';
-import {
-  useAccount,
-  useReadContract,
-  useWriteContract,
-} from 'wagmi';
+import { useAccount, useWriteContract } from 'wagmi';
 import { CONTRACTS, ABIS } from '../config/contracts';
 import { useLedgerTx } from '../hooks/useLedgerTx';
 import { TxStatusBanner } from './TxStatusBanner';
 import { addTokenToMetaMask } from '../utils/addTokenToMetaMask';
 import { PriceBar } from './PriceBar';
 
-// Minimal ERC20 ABI for balanceOf
-const ERC20_ABI = [
-  {
-    type: 'function',
-    name: 'balanceOf',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-] as const;
-
 type PositionPillProps = {
   marketId: bigint;
   positionId: bigint;
-  /** 0–1, or null if unknown */
+  name: string;
+  ticker: string;
+  tokenAddress: `0x${string}` | null;
+  balance: number;
   price: number | null;
+  erc20Symbol: string | null;
+  erc20Decimals: number | null;
   onAfterTx?: () => Promise<unknown> | void;
-  /** Called by this pill after a trade, so MarketRow refreshes all prices */
-  onMarketPriceUpdate?: () => Promise<unknown> | void;
 };
 
 export function PositionPill({
   marketId,
   positionId,
+  name,
+  ticker,
+  tokenAddress,
+  balance,
   price,
+  erc20Symbol,
+  erc20Decimals,
   onAfterTx,
-  onMarketPriceUpdate,
 }: PositionPillProps) {
   const { address } = useAccount();
-  const { ledger } = CONTRACTS.sepolia;
+  const { ledger, lmsr } = CONTRACTS.sepolia;
   const { writeContractAsync } = useWriteContract();
 
-  // --- Name + ticker from Ledger ---
-  const { data: posMeta } = useReadContract({
-    address: ledger as `0x${string}`,
-    abi: ABIS.ledger,
-    functionName: 'getPositionDetails',
-    args: [marketId, positionId],
-  });
-
-  const [name, ticker] = (posMeta || []) as [string, string];
-
-  // --- Position ERC20 address ---
-  const { data: tokenAddressRaw } = useReadContract({
-    address: ledger as `0x${string}`,
-    abi: ABIS.ledger,
-    functionName: 'getPositionERC20',
-    args: [marketId, positionId],
-  });
-
-  const tokenAddress =
-    (tokenAddressRaw as `0x${string}` | undefined) || undefined;
-
-  // --- Balance of this position token for the connected wallet ---
-  const {
-    data: balanceRaw,
-    refetch: refetchBalance,
-  } = useReadContract({
-    address: tokenAddress as `0x${string}` | undefined,
-    abi: ERC20_ABI,
-    functionName: 'balanceOf',
-    args: address && tokenAddress ? [address] : undefined,
-    query: {
-      enabled: !!address && !!tokenAddress,
-    },
-    watch: true,
-  });
-
-  let balanceLabel = '0';
-  if (balanceRaw !== undefined) {
-    const bal = Number(balanceRaw) / 1e6; // PositionERC20.decimals() = 6
-    balanceLabel = bal.toFixed(0);
-  }
-
-  // --- Shared tx hook with unified UX ---
   const {
     status,
     errorMessage,
@@ -95,8 +45,8 @@ export function PositionPill({
     setErrorMessage,
   } = useLedgerTx({ onAfterTx });
 
+  const [size, setSize] = useState<string>('1');
   const isBusy = status === 'pending';
-  const [size, setSize] = useState<string>('1'); // 1 USDC default
 
   const handleBuy = async () => {
     if (!address) {
@@ -110,44 +60,48 @@ export function PositionPill({
     const USDC_DECIMALS = 6;
     const usdcIn = BigInt(Math.round(parsed * 10 ** USDC_DECIMALS));
 
-    const { lmsr } = CONTRACTS.sepolia;
-
-    await runTx(
-      () =>
-        writeContractAsync({
-          address: ledger as `0x${string}`,
-          abi: ABIS.ledger,
-          functionName: 'buyForppUSDC',
-          args: [
-            lmsr as `0x${string}`,
-            marketId,
-            positionId,
-            true, // isBack
-            usdcIn,
-            0n,   // minTokensOut
-          ],
-        }),
-      {
-        // Local follow-up:
-        //  - refresh this position balance
-        //  - ask MarketRow to refetch ALL prices in this market
-        onLocalAfterTx: async () => {
-          await Promise.allSettled([
-            refetchBalance(),
-            onMarketPriceUpdate?.(),
-          ]);
-        },
-      }
+    await runTx(() =>
+      writeContractAsync({
+        address: ledger as `0x${string}`,
+        abi: ABIS.ledger,
+        functionName: 'buyForppUSDC',
+        args: [
+          lmsr as `0x${string}`,
+          marketId,
+          positionId,
+          true,
+          usdcIn,
+          0n,
+        ],
+      })
     );
   };
 
   const handleAddToMetaMask = async () => {
+    console.log('[PositionPill] Add to MetaMask click', {
+      positionId: positionId.toString(),
+      tokenAddress,
+      erc20Symbol,
+      erc20Decimals,
+      ticker,
+    });
+
     if (!tokenAddress) return;
-    const symbol = ticker || `POS${positionId.toString()}`;
+
+    const symbolToUse = erc20Symbol || ticker || `POS${positionId.toString()}`;
+    const decimalsToUse =
+      erc20Decimals != null ? erc20Decimals : 6;
+
+    console.log('[PositionPill] Calling addTokenToMetaMask', {
+      address: tokenAddress,
+      symbolToUse,
+      decimalsToUse,
+    });
+
     await addTokenToMetaMask({
       address: tokenAddress,
-      symbol,   // must match contract symbol now
-      decimals: 6,
+      symbol: symbolToUse,
+      decimals: decimalsToUse,
     });
   };
 
@@ -158,44 +112,89 @@ export function PositionPill({
     return 'Buy';
   })();
 
-  // --- Display format for price ---
+  const balanceLabel = Number.isFinite(balance)
+    ? balance.toFixed(0)
+    : '0';
+
   const clamped =
     price != null ? Math.max(0, Math.min(price, 1)) : null;
-
   const priceLabel =
     clamped != null ? `$${clamped.toFixed(3)}` : '–';
 
   return (
-    <div className="border rounded p-2 bg-light">
-      {/* Header row: name + price + balance */}
-      <div className="d-flex justify-content-between align-items-center mb-1">
+    <tr>
+      <td>
         <div>
           <strong>{ticker || positionId.toString()}</strong>{' '}
           <span className="text-muted">{name}</span>
         </div>
-        <div className="text-end">
-          <div className="fw-semibold text-primary">
+      </td>
+
+      <td className="text-end align-middle">
+        {balanceLabel}
+      </td>
+
+      <td className="align-middle">
+        <div className="d-flex flex-column">
+          <div className="fw-semibold text-primary text-end mb-1">
             {priceLabel}
           </div>
-          <div className="small text-success">
-            Bal: {balanceLabel}
+          <div className="d-flex justify-content-end">
+            <PriceBar price={clamped} />
           </div>
         </div>
-      </div>
+      </td>
 
-      {/* Probability bar */}
-      <div className="mb-2">
-        <PriceBar price={clamped} />
-      </div>
+      <td className="align-middle text-end">
+        <TransactionSection
+          size={size}
+          setSize={setSize}
+          isBusy={isBusy}
+          buttonLabel={buttonLabel}
+          onBuy={handleBuy}
+          status={status}
+          errorMessage={errorMessage}
+        />
+      </td>
 
+      <td className="align-middle text-end">
+        <AddToMetaMaskButton
+          tokenAddress={tokenAddress}
+          onAdd={handleAddToMetaMask}
+        />
+      </td>
+    </tr>
+  );
+}
+
+type TxSectionProps = {
+  size: string;
+  setSize: (v: string) => void;
+  isBusy: boolean;
+  buttonLabel: string;
+  onBuy: () => void;
+  status: 'idle' | 'pending' | 'success' | 'error';
+  errorMessage: string | null;
+};
+
+function TransactionSection({
+  size,
+  setSize,
+  isBusy,
+  buttonLabel,
+  onBuy,
+  status,
+  errorMessage,
+}: TxSectionProps) {
+  return (
+    <div>
       <TxStatusBanner
         status={status}
         errorMessage={errorMessage}
         successMessage="✅ Buy succeeded. Balances refreshed."
       />
 
-      {/* Controls row */}
-      <div className="d-flex align-items-center gap-2 mt-1">
+      <div className="d-flex justify-content-end align-items-center gap-2 mt-1">
         <input
           type="number"
           min="0"
@@ -206,10 +205,11 @@ export function PositionPill({
           style={{ width: '80px' }}
           placeholder="USDC"
         />
+
         <button
           type="button"
           className="btn btn-sm btn-primary"
-          onClick={handleBuy}
+          onClick={onBuy}
           disabled={isBusy}
         >
           {isBusy && (
@@ -221,16 +221,25 @@ export function PositionPill({
           )}
           {buttonLabel}
         </button>
-
-        <button
-          type="button"
-          className="btn btn-sm btn-outline-secondary"
-          onClick={handleAddToMetaMask}
-          disabled={!tokenAddress}
-        >
-          Add
-        </button>
       </div>
     </div>
+  );
+}
+
+type AddButtonProps = {
+  tokenAddress: `0x${string}` | null;
+  onAdd: () => void;
+};
+
+function AddToMetaMaskButton({ tokenAddress, onAdd }: AddButtonProps) {
+  return (
+    <button
+      type="button"
+      className="btn btn-sm btn-outline-secondary"
+      onClick={onAdd}
+      disabled={!tokenAddress}
+    >
+      Add
+    </button>
   );
 }

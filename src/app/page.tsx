@@ -4,11 +4,9 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useReadContract } from 'wagmi';
 import { CONTRACTS, ABIS } from '../config/contracts';
-import { Balances } from '../components/Balances';
-import { DepositPanel } from '../components/DepositPanel';
-import { WithdrawPanel } from '../components/WithdrawPanel';
 import { DevInfo } from '../components/DevInfo';
-import { Markets } from '../components/Markets';
+import { Markets } from '../components/Markets/Markets';
+import { WalletPanel } from '../components/WalletPanel';
 
 const ERC20_ABI = [
   {
@@ -92,11 +90,11 @@ export default function HomePage() {
       </header>
 
       {address && (
-        <>
-          <Balances usdcBalance={usdcBalance} ppBalance={ppBalance} />
-          <DepositPanel onAfterTx={handleAfterTx} />
-          <WithdrawPanel onAfterTx={handleAfterTx} />
-        </>
+        <WalletPanel
+          usdcBalance={usdcBalance}
+          ppBalance={ppBalance}
+          onAfterTx={handleAfterTx}
+        />
       )}
 
       <Markets marketIds={marketIds} onAfterTx={handleAfterTx} />
@@ -105,4 +103,3 @@ export default function HomePage() {
     </div>
   );
 }
-  
