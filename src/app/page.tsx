@@ -36,7 +36,6 @@ export default function HomePage() {
     query: {
       enabled: !!address,
     },
-    watch: true,
   });
 
   const {
@@ -50,7 +49,6 @@ export default function HomePage() {
     query: {
       enabled: !!address,
     },
-    watch: true,
   });
 
   const ppBalance =
@@ -63,6 +61,8 @@ export default function HomePage() {
   const {
     data: marketIdsRaw,
     refetch: refetchMarkets,
+    isLoading: isLoadingMarkets,
+    isFetching: isFetchingMarkets,
   } = useReadContract({
     address: ledger as `0x${string}`,
     abi: ABIS.ledger,
@@ -70,6 +70,7 @@ export default function HomePage() {
   });
 
   const marketIds = (marketIdsRaw as bigint[] | undefined) || [];
+  const marketsLoading = isLoadingMarkets || isFetchingMarkets;
 
   // --- Global after-tx handler for ALL tx paths ---
 
@@ -97,7 +98,18 @@ export default function HomePage() {
         />
       )}
 
-      <Markets marketIds={marketIds} onAfterTx={handleAfterTx} />
+      {marketsLoading ? (
+        <div className="mt-4 text-center">
+          <span
+            className="spinner-border text-secondary"
+            role="status"
+            aria-hidden="true"
+          />
+          <div className="text-muted mt-2">Loading markets…</div>
+        </div>
+      ) : (
+        <Markets marketIds={marketIds} onAfterTx={handleAfterTx} />
+      )}
 
       <DevInfo ledger={ledger} ppUSDC={ppUSDC} usdc={usdc} />
     </div>

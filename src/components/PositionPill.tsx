@@ -65,28 +65,39 @@ export function PositionPill({
 
     setLastAction(action);
 
+
     await runTx(
-      () =>
-        writeContractAsync({
-          address: ledger as `0x${string}`,
-          abi: ABIS.ledger,
-          functionName: 'buyForppUSDC',
-          args: [
-            lmsr as `0x${string}`,
-            marketId,
-            positionId,
-            isBack,   // 👈 true = back, false = lay
-            usdcIn,
-            0n,
-          ],
-        }),
-      {
-        // 👉 clear the input locally after tx success
-        onLocalAfterTx: async () => {
-          setSize('');
+        async () => {
+          console.log('[PositionPill] about to send trade tx', {
+            marketId: marketId.toString(),
+            positionId: positionId.toString(),
+            isBack,
+            usdcIn: usdcIn.toString(),
+          });
+      
+          const hash = await writeContractAsync({
+            address: ledger as `0x${string}`,
+            abi: ABIS.ledger,
+            functionName: 'buyForppUSDC',
+            args: [
+              lmsr as `0x${string}`,
+              marketId,
+              positionId,
+              isBack, // true = back, false = lay
+              usdcIn,
+              0n,
+            ],
+          });
+      
+          console.log('[PositionPill] tx sent, hash:', hash);
+          return hash;
         },
-      }
-    );
+        {
+          onLocalAfterTx: async () => {
+            setSize('');
+          },
+        }
+      );
   };
 
   const handleBack = async () => {
