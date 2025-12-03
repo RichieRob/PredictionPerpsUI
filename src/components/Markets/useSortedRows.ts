@@ -1,4 +1,5 @@
-// src/components/Markets/useSortedRows.ts
+
+// src/components/Markets/useSortedRows.tsx (no changes needed, but ensure PositionRow import matches)
 'use client';
 
 import { useMemo, useState } from 'react';

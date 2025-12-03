@@ -1,7 +1,8 @@
-// src/components/Markets/useMarketData.ts
+
+// src/components/Markets/useMarketData.tsx
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import {
   useAccount,
   useReadContract,
@@ -14,8 +15,23 @@ export type PositionRow = {
   positionId: bigint;
   name: string;
   ticker: string;
+  tokenAddress: `0x${string}`;
+  erc20Symbol: string;
   balance: number;        // whole tokens, decimals = 6
   price: number | null;   // 0–1
+};
+
+// Struct types matching Solidity
+type PositionInfoExtended = {
+  positionId: bigint;
+  name: string;
+  ticker: string;
+  tokenAddress: `0x${string}`;
+  erc20Symbol: string;
+};
+
+type PositionInfoWithBalanceExtended = PositionInfoExtended & {
+  balance: bigint;
 };
 
 export type { SortKey, SortDir } from './useSortedRows';
@@ -42,181 +58,134 @@ export function useMarketData(id: bigint) {
     string
   ];
 
-  /* ---------------- Positions ---------------- */
+  /* ---------------- Positions Info ---------------- */
+  const positionsFunctionName = address
+    ? 'getMarketPositionsInfoForAccountExtended'
+    : 'getMarketPositionsInfoExtended';
+
+  const positionsArgs = address
+    ? [id, address]
+    : [id];
+
   const {
-    data: positionsRaw,
-    refetch: refetchPositions,
-    isLoading: isLoadingPositions,
-    isFetching: isFetchingPositions,
+    data: positionsInfoRaw,
+    refetch: refetchPositionsInfo,
+    isLoading: isLoadingPositionsInfo,
+    isFetching: isFetchingPositionsInfo,
+    error: positionsInfoError,
   } = useReadContract({
     address: ledger as `0x${string}`,
     abi: ABIS.ledger,
-    functionName: 'getMarketPositions',
-    args: [id],
-  });
-
-  const positions = (positionsRaw as bigint[] | undefined) || [];
-  const positionsLoaded = positionsRaw !== undefined;
-
-  /* ---------------- Prices (LMSR) ---------------- */
-  const priceContracts = useMemo(() => {
-    if (!lmsr || positions.length === 0) return [];
-
-    return [
-      // BACK prices per position
-      ...positions.map((posId) => ({
-        address: lmsr as `0x${string}`,
-        abi: ABIS.lmsr,
-        functionName: 'getBackPriceWad',
-        args: [id, posId],
-      })),
-      // reserve / OTHER
-      {
-        address: lmsr as `0x${string}`,
-        abi: ABIS.lmsr,
-        functionName: 'getReservePriceWad',
-        args: [id],
-      },
-    ];
-  }, [positions, lmsr, id]);
-
-  const {
-    data: pricesData,
-    refetch: refetchMarketPrices,
-    isLoading: isLoadingPrices,
-    isFetching: isFetchingPrices,
-  } = useReadContracts({
-    contracts: priceContracts,
+    functionName: positionsFunctionName,
+    args: positionsArgs,
     query: {
-      enabled: priceContracts.length > 0,
+      enabled: true,
     },
   });
 
-  const positionPrices: (number | null)[] = useMemo(() => {
-    if (!pricesData || positions.length === 0) {
-      return positions.map(() => null);
+  console.log('[useMarketData] Positions info fetch status', {
+    marketId: id.toString(),
+    address,
+    functionName: positionsFunctionName,
+    isLoading: isLoadingPositionsInfo,
+    isFetching: isFetchingPositionsInfo,
+    error: positionsInfoError?.message,
+  });
+
+  useEffect(() => {
+    if (positionsInfoRaw) {
+      console.log('[useMarketData] Positions info data updated', {
+        marketId: id.toString(),
+        numPositions: (positionsInfoRaw as any[]).length,
+        sample: (positionsInfoRaw as any[]).slice(0, 3),
+      });
+    } else {
+      console.log('[useMarketData] Positions info data is undefined/null', {
+        marketId: id.toString(),
+      });
     }
-    return positions.map((_, idx) => {
-      const entry: any = pricesData[idx];
-      const wad = entry?.result as bigint | undefined;
-      if (!wad) return null;
-      const n = Number(wad) / 1e18;
-      return Number.isFinite(n) ? n : null;
-    });
-  }, [pricesData, positions]);
+  }, [positionsInfoRaw, id]);
 
-  let reservePrice: number | null = null;
-  if (pricesData && pricesData.length > 0 && positions.length > 0) {
-    const reserveEntry: any = pricesData[positions.length];
-    const reserve = reserveEntry?.result as bigint | undefined;
-    if (reserve) {
-      const n = Number(reserve) / 1e18;
-      if (Number.isFinite(n)) reservePrice = n;
-    }
-  }
+  const positionsInfo = (positionsInfoRaw as (PositionInfoExtended | PositionInfoWithBalanceExtended)[] | undefined) || [];
 
-  /* ---------------- Position meta (names / tickers) ---------------- */
-  const posMetaContracts = useMemo(
-    () =>
-      positions.map((posId) => ({
-        address: ledger as `0x${string}`,
-        abi: ABIS.ledger,
-        functionName: 'getPositionDetails',
-        args: [id, posId],
-      })),
-    [positions, ledger, id]
-  );
+  const positions = positionsInfo.map(info => info.positionId);
+  const havePositions = positionsInfoRaw !== undefined && positions.length > 0;
 
+  /* ---------------- Prices (NEW: batched via getAllBackPricesWad) ---------------- */
   const {
-    data: posMetaData,
-    refetch: refetchPosMeta,
-    isLoading: isLoadingPosMeta,
-    isFetching: isFetchingPosMeta,
-  } = useReadContracts({
-    contracts: posMetaContracts,
+    data: pricesRaw,
+    refetch: refetchMarketPrices,
+    isLoading: isLoadingPrices,
+    isFetching: isFetchingPrices,
+  } = useReadContract({
+    address: lmsr as `0x${string}`,
+    abi: ABIS.lmsr,
+    functionName: 'getAllBackPricesWad',
+    args: [id],
     query: {
       enabled: positions.length > 0,
     },
   });
 
-  /* ---------------- Balances (ledger.balanceOf) ---------------- */
-  const balanceContracts = useMemo(() => {
-    if (!address || positions.length === 0) return [];
-    // function balanceOf(uint marketId, uint positionId, address account)
-    return positions.map((posId) => ({
-      address: ledger as `0x${string}`,
-      abi: ABIS.ledger,
-      functionName: 'balanceOf',
-      args: [id, posId, address],
-    }));
-  }, [address, positions, ledger, id]);
+  // Extract prices and reserve
+  const [allPrices, reservePriceWad] = (pricesRaw || [[], 0n]) as [ {positionId: bigint, priceWad: bigint}[], bigint ];
 
-  const {
-    data: balancesData,
-    refetch: refetchBalances,
-    isLoading: isLoadingBalances,
-    isFetching: isFetchingBalances,
-  } = useReadContracts({
-    contracts: balanceContracts,
-    query: {
-      enabled: balanceContracts.length > 0,
-    },
-  });
+  const positionPrices: (number | null)[] = useMemo(() => {
+    if (positions.length === 0) return [];
+
+    // Map prices by positionId for lookup
+    const priceMap = new Map<bigint, number>();
+    allPrices.forEach(({positionId, priceWad}) => {
+      const n = Number(priceWad) / 1e18;
+      if (Number.isFinite(n)) {
+        priceMap.set(positionId, n);
+      }
+    });
+
+    return positions.map(posId => priceMap.get(posId) ?? null);
+  }, [allPrices, positions]);
+
+  let reservePrice: number | null = null;
+  const reserveN = Number(reservePriceWad) / 1e18;
+  if (Number.isFinite(reserveN)) reservePrice = reserveN;
 
   /* ---------------- All-or-nothing readiness ---------------- */
+  const havePrices = positions.length === 0 || !!pricesRaw;
 
-  const havePositions = positionsLoaded;
+  const havePosMetaAndBalances = !!positionsInfoRaw && positionsInfo.length === positions.length;
 
-  const havePrices =
-    positions.length === 0 ||
-    (priceContracts.length === 0 ||
-      (pricesData && pricesData.length === priceContracts.length));
-
-  const havePosMeta =
-    positions.length === 0 ||
-    (!!posMetaData && posMetaData.length === positions.length);
-
-  const haveBalances =
-    balanceContracts.length === 0 ||
-    (!!balancesData && balancesData.length === balanceContracts.length);
-
-  const fullyReady =
-    havePositions &&
-    havePrices &&
-    havePosMeta &&
-    haveBalances;
+  const fullyReady = havePositions && havePrices && havePosMetaAndBalances;
 
   /* ---------------- Rows ---------------- */
   const rows: PositionRow[] = useMemo(() => {
     if (!fullyReady) return [];
 
-    return positions.map((posId, i) => {
-      const metaEntry: any = posMetaData?.[i];
-      const balEntry: any = balancesData?.[i];
+    return positionsInfo.map((info, i) => {
+      const balanceRaw = address && 'balance' in info ? info.balance : 0n;
+      const balance = Number(balanceRaw) / 1e6;
 
-      const posName = metaEntry?.result?.[0] ?? '';
-      const posTicker = metaEntry?.result?.[1] ?? '';
-
-      const balRaw = (balEntry?.result as bigint | undefined) ?? 0n;
-      // decimals fixed at 6
-      const balance = Number(balRaw) / 1e6;
-
-      const price = positionPrices[i];
+      console.log('[useMarketData] Computed row balance', {
+        marketId: id.toString(),
+        positionId: info.positionId.toString(),
+        rawBalance: balanceRaw.toString(),
+        computedBalance: balance,
+      });
 
       return {
-        positionId: posId,
-        name: posName,
-        ticker: posTicker,
+        positionId: info.positionId,
+        name: info.name,
+        ticker: info.ticker,
+        tokenAddress: info.tokenAddress,
+        erc20Symbol: info.erc20Symbol,
         balance,
-        price,
+        price: positionPrices[i],
       };
     });
   }, [
     fullyReady,
-    positions,
-    posMetaData,
-    balancesData,
+    positionsInfo,
     positionPrices,
+    address,
   ]);
 
   /* ---------------- Sorting ---------------- */
@@ -227,14 +196,12 @@ export function useMarketData(id: bigint) {
     sortDir,
   } = useSortedRows(rows);
 
-  /* ---------------- Refetch all (after tx / manual refresh) ---------------- */
+  /* ---------------- Refetch all ---------------- */
   const refetchAll = async () => {
     await Promise.allSettled([
       refetchMarketMeta?.(),
-      refetchPositions?.(),
+      refetchPositionsInfo?.(),
       refetchMarketPrices?.(),
-      refetchPosMeta?.(),
-      refetchBalances?.(),
     ]);
   };
 
@@ -243,14 +210,10 @@ export function useMarketData(id: bigint) {
     !fullyReady ||
     isLoadingMarketMeta ||
     isFetchingMarketMeta ||
-    isLoadingPositions ||
-    isFetchingPositions ||
+    isLoadingPositionsInfo ||
+    isFetchingPositionsInfo ||
     isLoadingPrices ||
-    isFetchingPrices ||
-    isLoadingPosMeta ||
-    isFetchingPosMeta ||
-    isLoadingBalances ||
-    isFetchingBalances;
+    isFetchingPrices;
 
   return {
     marketName,
@@ -263,4 +226,4 @@ export function useMarketData(id: bigint) {
     refetchAll,
     isLoading,
   };
-}
+};

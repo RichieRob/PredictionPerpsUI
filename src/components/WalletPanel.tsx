@@ -1,4 +1,3 @@
-// src/components/WalletPanel.tsx
 'use client';
 
 import { useState } from 'react';
@@ -40,39 +39,35 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
   const chainKey = 'sepolia' as const;
   const { ledger, usdc } = CONTRACTS[chainKey];
 
-  const {
-    status,
-    errorMessage,
-    setErrorMessage,
-    runTx,
-  } = useLedgerTx({ onAfterTx });
+  // NEW: Separate hooks for deposit and withdraw
+  const depositTx = useLedgerTx({ onAfterTx });
+  const withdrawTx = useLedgerTx({ onAfterTx });
 
-  // 👉 default blank
   const [depositAmount, setDepositAmount] = useState<string>('');
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
 
-  const isBusy = status === 'pending';
+  const isBusyDeposit = depositTx.status === 'pending';
+  const isBusyWithdraw = withdrawTx.status === 'pending';
 
-  // --- Wallet → Ledger (deposit using permit) ---
-
+  // --- Deposit (Wrap) ---
   const handleDeposit = async () => {
     if (!address) {
-      setErrorMessage('Wallet not connected.');
+      depositTx.setErrorMessage('Wallet not connected.');
       return;
     }
     if (!publicClient || !walletClient) {
-      setErrorMessage('RPC or wallet client not ready.');
+      depositTx.setErrorMessage('RPC or wallet client not ready.');
       return;
     }
 
     const parsed = Number(depositAmount);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      setErrorMessage('Enter a valid deposit amount.');
+      depositTx.setErrorMessage('Enter a valid deposit amount.');
       return;
     }
 
     try {
-      setErrorMessage(null);
+      depositTx.setErrorMessage(null);
 
       const amount = parseUnits(depositAmount, 6);
 
@@ -130,7 +125,7 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
         s,
       };
 
-      await runTx(
+      await depositTx.runTx(
         () =>
           writeContractAsync({
             address: ledger as `0x${string}`,
@@ -147,7 +142,6 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
             gas: 5_000_000n,
           }),
         {
-          // 👉 clear input after successful deposit
           onLocalAfterTx: async () => {
             setDepositAmount('');
           },
@@ -161,29 +155,28 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
         err?.cause?.details ||
         err?.message ||
         'Transaction failed';
-      setErrorMessage(short);
+      depositTx.setErrorMessage(short);
     }
   };
 
-  // --- Ledger → Wallet (withdraw) ---
-
+  // --- Withdraw (Unwrap) ---
   const handleWithdraw = async () => {
     if (!address) {
-      setErrorMessage('Wallet not connected.');
+      withdrawTx.setErrorMessage('Wallet not connected.');
       return;
     }
 
     const parsed = Number(withdrawAmount);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      setErrorMessage('Enter a valid withdraw amount.');
+      withdrawTx.setErrorMessage('Enter a valid withdraw amount.');
       return;
     }
 
     try {
-      setErrorMessage(null);
+      withdrawTx.setErrorMessage(null);
       const amount = parseUnits(withdrawAmount, 6);
 
-      await runTx(
+      await withdrawTx.runTx(
         () =>
           writeContractAsync({
             address: ledger as `0x${string}`,
@@ -193,7 +186,6 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
             gas: 3_000_000n,
           }),
         {
-          // 👉 clear input after successful withdraw
           onLocalAfterTx: async () => {
             setWithdrawAmount('');
           },
@@ -207,23 +199,9 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
         err?.cause?.details ||
         err?.message ||
         'Transaction failed';
-      setErrorMessage(short);
+      withdrawTx.setErrorMessage(short);
     }
   };
-
-  const buttonLabelDeposit = (() => {
-    if (status === 'pending') return 'Sign & Wrap…';
-    if (status === 'success') return 'Wrapped ✔';
-    if (status === 'error') return 'Try again';
-    return 'Wrap';
-  })();
-
-  const buttonLabelWithdraw = (() => {
-    if (status === 'pending') return 'Unwrapping...';
-    if (status === 'success') return 'Unrapped ✔';
-    if (status === 'error') return 'Try again';
-    return 'Unwrap';
-  })();
 
   return (
     <section className="mb-4">
@@ -240,9 +218,15 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
           </div>
         </div>
 
+        {/* NEW: Separate banners for each */}
         <TxStatusBanner
-          status={status}
-          errorMessage={errorMessage}
+          status={depositTx.status}
+          errorMessage={depositTx.errorMessage}
+          successMessage="✅ Transaction succeeded. Balances refreshed."
+        />
+        <TxStatusBanner
+          status={withdrawTx.status}
+          errorMessage={withdrawTx.errorMessage}
           successMessage="✅ Transaction succeeded. Balances refreshed."
         />
 
@@ -268,21 +252,23 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
                 type="button"
                 className="btn btn-primary btn-sm d-inline-flex align-items-center"
                 onClick={handleDeposit}
-                disabled={isBusy}
+                disabled={isBusyDeposit}
               >
-                {isBusy && (
+                {isBusyDeposit && (
                   <span
                     className="spinner-border spinner-border-sm me-2"
                     role="status"
                     aria-hidden="true"
                   />
                 )}
-                {buttonLabelDeposit}
+                {depositTx.status === 'pending' ? 'Sign & Wrap…' :
+                 depositTx.status === 'success' ? 'Wrapped ✔' :
+                 depositTx.status === 'error' ? 'Try again' : 'Wrap'}
               </button>
             </div>
           </div>
 
-          {/* Ledger → Wallet */}
+          {/* ppUSDC → USDC */}
           <div className="col-12 col-md-6">
             <div className="mb-1 fw-semibold">ppUSDC → USDC</div>
             <p className="text-muted small mb-2">
@@ -303,16 +289,18 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
                 type="button"
                 className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center"
                 onClick={handleWithdraw}
-                disabled={isBusy}
+                disabled={isBusyWithdraw}
               >
-                {isBusy && (
+                {isBusyWithdraw && (
                   <span
                     className="spinner-border spinner-border-sm me-2"
                     role="status"
                     aria-hidden="true"
                   />
                 )}
-                {buttonLabelWithdraw}
+                {withdrawTx.status === 'pending' ? 'Unwrapping...' :
+                 withdrawTx.status === 'success' ? 'Unwrapped ✔' :
+                 withdrawTx.status === 'error' ? 'Try again' : 'Unwrap'}
               </button>
             </div>
           </div>

@@ -16,7 +16,7 @@ const SOURCES = [
   {
     // Ledger (MarketMakerLedger)
     artifactPath:
-      'artifacts/Contracts/Ledger/Ledger.sol/MarketMakerLedger.json',
+      'artifacts/Contracts/Ledger/Ledger.sol/Ledger.json',
     outFile: 'MarketMakerLedger.json',
   },
   {

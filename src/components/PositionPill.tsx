@@ -1,25 +1,24 @@
+
 // src/components/PositionPill.tsx
 'use client';
 
 import React, { useState } from 'react';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { CONTRACTS, ABIS } from '../config/contracts';
 import { useLedgerTx } from '../hooks/useLedgerTx';
 import { TxStatusBanner } from './TxStatusBanner';
 import { addTokenToMetaMask } from '../utils/addTokenToMetaMask';
 import { PriceBar } from './PriceBar';
 
-
 type PositionPillProps = {
   marketId: bigint;
   positionId: bigint;
   name: string;
   ticker: string;
-  tokenAddress: `0x${string}` | null;
+  tokenAddress: `0x${string}`;
   balance: number;
   price: number | null;
-  erc20Symbol: string | null;
-  erc20Decimals: number | null;
+  erc20Symbol: string;
   onAfterTx?: () => Promise<unknown> | void;
 };
 
@@ -32,28 +31,25 @@ export function PositionPill({
   balance,
   price,
   erc20Symbol,
-  erc20Decimals,
   onAfterTx,
 }: PositionPillProps) {
   const { address } = useAccount();
   const { ledger, lmsr } = CONTRACTS.sepolia;
   const { writeContractAsync } = useWriteContract();
 
-  const {
-    status,
-    errorMessage,
-    runTx,
-    setErrorMessage,
-  } = useLedgerTx({ onAfterTx });
+  // NEW: Separate hooks for back and lay
+  const backTx = useLedgerTx({ onAfterTx });
+  const layTx = useLedgerTx({ onAfterTx });
 
-  // 👉 default blank
   const [size, setSize] = useState<string>('');
-  const [lastAction, setLastAction] = useState<'back' | 'lay' | null>(null);
-  const isBusy = status === 'pending';
 
-  const executeTrade = async (isBack: boolean, action: 'back' | 'lay') => {
+  const isBusyBack = backTx.status === 'pending';
+  const isBusyLay = layTx.status === 'pending';
+
+  const executeTrade = async (isBack: boolean) => {
     if (!address) {
-      setErrorMessage('Wallet not connected.');
+      const txHook = isBack ? backTx : layTx;
+      txHook.setErrorMessage('Wallet not connected.');
       return;
     }
 
@@ -63,65 +59,79 @@ export function PositionPill({
     const USDC_DECIMALS = 6;
     const usdcIn = BigInt(Math.round(parsed * 10 ** USDC_DECIMALS));
 
-    setLastAction(action);
+    const txHook = isBack ? backTx : layTx;
 
-
-    await runTx(
-        async () => {
-          console.log('[PositionPill] about to send trade tx', {
-            marketId: marketId.toString(),
-            positionId: positionId.toString(),
+    await txHook.runTx(
+      async () => {
+        console.log('[PositionPill] about to send trade tx', {
+          marketId: marketId.toString(),
+          positionId: positionId.toString(),
+          isBack,
+          usdcIn: usdcIn.toString(),
+        });
+    
+        const hash = await writeContractAsync({
+          address: ledger as `0x${string}`,
+          abi: ABIS.ledger,
+          functionName: 'buyForppUSDC',
+          args: [
+            lmsr as `0x${string}`,
+            marketId,
+            positionId,
             isBack,
-            usdcIn: usdcIn.toString(),
-          });
-      
-          const hash = await writeContractAsync({
-            address: ledger as `0x${string}`,
-            abi: ABIS.ledger,
-            functionName: 'buyForppUSDC',
-            args: [
-              lmsr as `0x${string}`,
-              marketId,
-              positionId,
-              isBack, // true = back, false = lay
-              usdcIn,
-              0n,
-            ],
-          });
-      
-          console.log('[PositionPill] tx sent, hash:', hash);
-          return hash;
+            usdcIn,
+            0n,
+          ],
+        });
+    
+        console.log('[PositionPill] tx sent, hash:', hash);
+        return hash;
+      },
+      {
+        onLocalAfterTx: async () => {
+          setSize('');
         },
-        {
-          onLocalAfterTx: async () => {
-            setSize('');
-          },
-        }
-      );
+      }
+    );
   };
 
   const handleBack = async () => {
-    await executeTrade(true, 'back');
+    await executeTrade(true);
   };
 
   const handleLay = async () => {
-    await executeTrade(false, 'lay');
+    await executeTrade(false);
   };
 
+  // Fetch decimals on demand
+  const [isFetchingDecimals, setIsFetchingDecimals] = useState(false);
+
+  const { data: decimalsRaw } = useReadContract({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: 'decimals',
+    query: {
+      enabled: isFetchingDecimals,
+    },
+  });
+
+  const fetchedDecimals = decimalsRaw !== undefined ? Number(decimalsRaw) : 6;
+
   const handleAddToMetaMask = async () => {
+    setIsFetchingDecimals(true);
+
     console.log('[PositionPill] Add to MetaMask click', {
       positionId: positionId.toString(),
       tokenAddress,
       erc20Symbol,
-      erc20Decimals,
       ticker,
     });
 
-    if (!tokenAddress) return;
+    // Wait briefly for fetch if triggered
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const symbolToUse = erc20Symbol || ticker || `POS${positionId.toString()}`;
-    const decimalsToUse =
-      erc20Decimals != null ? erc20Decimals : 6;
+    const decimalsToUse = fetchedDecimals;
 
     console.log('[PositionPill] Calling addTokenToMetaMask', {
       address: tokenAddress,
@@ -134,30 +144,13 @@ export function PositionPill({
       symbol: symbolToUse,
       decimals: decimalsToUse,
     });
+
+    setIsFetchingDecimals(false);
   };
 
-  const backButtonLabel = (() => {
-    if (status === 'pending' && lastAction === 'back') return 'Backing...';
-    if (status === 'success' && lastAction === 'back') return 'Backed ✔';
-    if (status === 'error' && lastAction === 'back') return 'Try again';
-    return 'Back';
-  })();
-
-  const layButtonLabel = (() => {
-    if (status === 'pending' && lastAction === 'lay') return 'Laying...';
-    if (status === 'success' && lastAction === 'lay') return 'Laid ✔';
-    if (status === 'error' && lastAction === 'lay') return 'Try again';
-    return 'Lay';
-  })();
-
-  const balanceLabel = Number.isFinite(balance)
-    ? balance.toFixed(0)
-    : '0';
-
-  const clamped =
-    price != null ? Math.max(0, Math.min(price, 1)) : null;
-  const priceLabel =
-    clamped != null ? `$${clamped.toFixed(3)}` : '–';
+  const clamped = price != null ? Math.max(0, Math.min(price, 1)) : null;
+  const priceLabel = clamped != null ? `$${clamped.toFixed(6)}` : '–';
+  const balanceLabel = Number.isFinite(balance) ? balance.toFixed(0) : '0';
 
   return (
     <tr>
@@ -187,20 +180,21 @@ export function PositionPill({
         <TransactionSection
           size={size}
           setSize={setSize}
-          isBusy={isBusy}
-          backButtonLabel={backButtonLabel}
-          layButtonLabel={layButtonLabel}
+          isBusyBack={isBusyBack}
+          isBusyLay={isBusyLay}
           onBack={handleBack}
           onLay={handleLay}
-          status={status}
-          errorMessage={errorMessage}
+          backStatus={backTx.status}
+          layStatus={layTx.status}
+          backErrorMessage={backTx.errorMessage}
+          layErrorMessage={layTx.errorMessage}
         />
       </td>
 
       <td className="align-middle text-end">
         <AddToMetaMaskButton
-          tokenAddress={tokenAddress}
           onAdd={handleAddToMetaMask}
+          disabled={isFetchingDecimals}
         />
       </td>
     </tr>
@@ -210,31 +204,39 @@ export function PositionPill({
 type TxSectionProps = {
   size: string;
   setSize: (v: string) => void;
-  isBusy: boolean;
-  backButtonLabel: string;
-  layButtonLabel: string;
+  isBusyBack: boolean;
+  isBusyLay: boolean;
   onBack: () => void;
   onLay: () => void;
-  status: 'idle' | 'pending' | 'success' | 'error';
-  errorMessage: string | null;
+  backStatus: 'idle' | 'pending' | 'success' | 'error';
+  layStatus: 'idle' | 'pending' | 'success' | 'error';
+  backErrorMessage: string | null;
+  layErrorMessage: string | null;
 };
 
 function TransactionSection({
   size,
   setSize,
-  isBusy,
-  backButtonLabel,
-  layButtonLabel,
+  isBusyBack,
+  isBusyLay,
   onBack,
   onLay,
-  status,
-  errorMessage,
+  backStatus,
+  layStatus,
+  backErrorMessage,
+  layErrorMessage,
 }: TxSectionProps) {
   return (
     <div>
+      {/* NEW: Separate banners */}
       <TxStatusBanner
-        status={status}
-        errorMessage={errorMessage}
+        status={backStatus}
+        errorMessage={backErrorMessage}
+        successMessage="✅ Trade succeeded. Balances refreshed."
+      />
+      <TxStatusBanner
+        status={layStatus}
+        errorMessage={layErrorMessage}
         successMessage="✅ Trade succeeded. Balances refreshed."
       />
 
@@ -254,32 +256,36 @@ function TransactionSection({
           type="button"
           className="btn btn-sm btn-primary"
           onClick={onBack}
-          disabled={isBusy}
+          disabled={isBusyBack}
         >
-          {isBusy && (
+          {isBusyBack && (
             <span
               className="spinner-border spinner-border-sm me-1"
               role="status"
               aria-hidden="true"
             />
           )}
-          {backButtonLabel}
+          {backStatus === 'pending' ? 'Backing...' :
+           backStatus === 'success' ? 'Backed ✔' :
+           backStatus === 'error' ? 'Try again' : 'Back'}
         </button>
 
         <button
           type="button"
           className="btn btn-sm btn-outline-primary"
           onClick={onLay}
-          disabled={isBusy}
+          disabled={isBusyLay}
         >
-          {isBusy && (
+          {isBusyLay && (
             <span
               className="spinner-border spinner-border-sm me-1"
               role="status"
               aria-hidden="true"
             />
           )}
-          {layButtonLabel}
+          {layStatus === 'pending' ? 'Laying...' :
+           layStatus === 'success' ? 'Laid ✔' :
+           layStatus === 'error' ? 'Try again' : 'Lay'}
         </button>
       </div>
     </div>
@@ -287,19 +293,30 @@ function TransactionSection({
 }
 
 type AddButtonProps = {
-  tokenAddress: `0x${string}` | null;
   onAdd: () => void;
+  disabled: boolean;
 };
 
-function AddToMetaMaskButton({ tokenAddress, onAdd }: AddButtonProps) {
+function AddToMetaMaskButton({ onAdd, disabled }: AddButtonProps) {
   return (
     <button
       type="button"
       className="btn btn-sm btn-outline-secondary"
       onClick={onAdd}
-      disabled={!tokenAddress}
+      disabled={disabled}
     >
       Add
     </button>
   );
 }
+
+// NEW: Standard ERC20 ABI for symbol/decimals (add to file or import from contracts if not there)
+const ERC20_ABI = [
+  {
+    type: 'function',
+    name: 'decimals',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ type: 'uint8' }],
+  },
+] as const;

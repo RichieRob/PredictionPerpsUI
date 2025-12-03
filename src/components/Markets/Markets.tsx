@@ -168,7 +168,6 @@ function MarketTable({ id, onAfterTx }: MarketTableProps) {
                     balance={row.balance}
                     price={row.price}
                     erc20Symbol={row.erc20Symbol}
-                    erc20Decimals={row.erc20Decimals}
                     onAfterTx={handleAfterTx}
                   />
                 ))}
