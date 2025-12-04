@@ -31,6 +31,18 @@ const SOURCES = [
       'artifacts/Contracts/AMM/LMSRMarketMaker.sol/LMSRMarketMaker.json',
     outFile: 'LMSRMarketMaker.json',
   },
+  {
+    // IntentContract
+    artifactPath:
+      'artifacts/Contracts/Ledger/IntentContract.sol/IntentContract.json',
+    outFile: 'IntentContract.json',
+  },
+  {
+    // LedgerViews
+    artifactPath:
+      'artifacts/Contracts/Ledger/LedgerViews.sol/LedgerViews.json',
+    outFile: 'LedgerViews.json',
+  },
 ];
 
 const DEST_DIR = path.resolve(__dirname, '..', 'src', 'config', 'abis');

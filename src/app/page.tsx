@@ -70,7 +70,7 @@ export default function HomePage() {
   });
 
   const marketIds = (marketIdsRaw as bigint[] | undefined) || [];
-  const marketsLoading = isLoadingMarkets || isFetchingMarkets;
+  const marketsLoading = isLoadingMarkets;  // Remove isFetching to avoid hiding during refetch
 
   // --- Global after-tx handler for ALL tx paths ---
 

@@ -36,8 +36,8 @@ export async function addTokenToMetaMask({
         type: 'ERC20',
         options: {
           address,
-          symbol,   // 👈 send the exact contract symbol
-          decimals, // 👈 must equal token.decimals()
+          symbol,
+          decimals,
         },
       },
     });
@@ -61,5 +61,64 @@ export async function addTokenToMetaMask({
 
     console.log('[addTokenToMetaMask] wallet_watchAsset error:', msg);
     return false;
+  }
+}
+
+// NEW: Batch version (concurrent requests for unified prompt)
+export async function addTokensToMetaMask(tokens: AddTokenArgs[]): Promise<boolean[]> {
+  if (typeof window === 'undefined') {
+    console.log('[addTokensToMetaMask] window undefined (SSR)');
+    return tokens.map(() => false);
+  }
+
+  const ethereum = (window as any).ethereum;
+  if (!ethereum?.request) {
+    console.log('[addTokensToMetaMask] No ethereum provider on window.');
+    return tokens.map(() => false);
+  }
+
+  if (tokens.length === 0) {
+    console.log('[addTokensToMetaMask] No tokens provided.');
+    return [];
+  }
+
+  try {
+    console.log('[addTokensToMetaMask] Preparing batch watchAsset requests:', tokens);
+
+    // Fire concurrent requests (MetaMask may batch UI prompts)
+    const promises = tokens.map(async (token) => {
+      try {
+        return await ethereum.request({
+          method: 'wallet_watchAsset',
+          params: {
+            type: 'ERC20',
+            options: {
+              address: token.address,
+              symbol: token.symbol,
+              decimals: token.decimals,
+            },
+          },
+        });
+      } catch (err) {
+        console.error('[addTokensToMetaMask] Error adding token:', token.address, err);
+        return false;
+      }
+    });
+
+    const results = await Promise.all(promises);
+    const successes = results.map((res) => !!res);
+
+    console.log('[addTokensToMetaMask] Batch watchAsset results:', successes);
+    return successes;
+  } catch (err: any) {
+    const msg =
+      err?.message ||
+      err?.code ||
+      (Object.keys(err || {}).length === 0
+        ? 'Unknown / empty error (likely user cancelled)'
+        : JSON.stringify(err));
+
+    console.log('[addTokensToMetaMask] Batch watchAsset error:', msg);
+    return tokens.map(() => false);
   }
 }

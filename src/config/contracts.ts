@@ -1,6 +1,7 @@
 import marketMakerLedgerAbiJson from './abis/MarketMakerLedger.json';
 import ppUsdcAbiJson from './abis/PpUSDC.json';
 import lmsrAbiJson from './abis/LMSRMarketMaker.json';
+import ledgerViewsAbiJson from './abis/LedgerViews.json'
 
 import deploymentsJson from '../../../PredictionPerpsContractsV2/deployments.json';
 
@@ -14,6 +15,7 @@ interface CoreDeployment {
   MockAavePool: string;
   PpUSDC: string;
   Ledger: string;
+  LedgerViews: string;
   PositionERC20: string;
   Permit2: string;
 }
@@ -45,6 +47,7 @@ export const CONTRACTS = {
   sepolia: {
     deployer:     deployments.core.deployer,
     ledger:       deployments.core.Ledger,
+    ledgerViews:  deployments.core.LedgerViews,
     ppUSDC:       deployments.core.PpUSDC,
     usdc:         deployments.core.MockUSDC,
     ausdc:        deployments.core.MockAUSDC,
@@ -61,6 +64,7 @@ export const CONTRACTS = {
 
 export const ABIS = {
   ledger: (marketMakerLedgerAbiJson as any).abi,
+  ledgerViews: (ledgerViewsAbiJson as any).abi,
   ppUSDC: (ppUsdcAbiJson as any).abi,
   lmsr:   (lmsrAbiJson as any).abi,
 };

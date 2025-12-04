@@ -1,15 +1,14 @@
-
-// src/components/Markets/useMarketData.tsx
+// src/hooks/Markets/useMarketData.ts
 'use client';
 
 import { useMemo, useEffect } from 'react';
 import {
   useAccount,
   useReadContract,
-  useReadContracts,
 } from 'wagmi';
 import { CONTRACTS, ABIS } from '../../config/contracts';
 import { useSortedRows } from './useSortedRows';
+import { usePrevious } from '../../hooks/usePrevious';
 
 export type PositionRow = {
   positionId: bigint;
@@ -21,7 +20,6 @@ export type PositionRow = {
   price: number | null;   // 0–1
 };
 
-// Struct types matching Solidity
 type PositionInfoExtended = {
   positionId: bigint;
   name: string;
@@ -37,7 +35,8 @@ type PositionInfoWithBalanceExtended = PositionInfoExtended & {
 export type { SortKey, SortDir } from './useSortedRows';
 
 export function useMarketData(id: bigint) {
-  const { ledger, lmsr } = CONTRACTS.sepolia;
+  // 🔁 include ledgerViews from config
+  const { ledger, ledgerViews, lmsr } = CONTRACTS.sepolia;
   const { address } = useAccount();
 
   /* ---------------- Market Meta ---------------- */
@@ -58,7 +57,7 @@ export function useMarketData(id: bigint) {
     string
   ];
 
-  /* ---------------- Positions Info ---------------- */
+  /* ---------------- Positions Info (via LedgerViews) ---------------- */
   const positionsFunctionName = address
     ? 'getMarketPositionsInfoForAccountExtended'
     : 'getMarketPositionsInfoExtended';
@@ -74,8 +73,9 @@ export function useMarketData(id: bigint) {
     isFetching: isFetchingPositionsInfo,
     error: positionsInfoError,
   } = useReadContract({
-    address: ledger as `0x${string}`,
-    abi: ABIS.ledger,
+    // 🔴 POINT AT LedgerViews, NOT ledger
+    address: ledgerViews as `0x${string}`,
+    abi: ABIS.ledgerViews,
     functionName: positionsFunctionName,
     args: positionsArgs,
     query: {
@@ -106,12 +106,13 @@ export function useMarketData(id: bigint) {
     }
   }, [positionsInfoRaw, id]);
 
-  const positionsInfo = (positionsInfoRaw as (PositionInfoExtended | PositionInfoWithBalanceExtended)[] | undefined) || [];
+  const positionsInfo =
+    (positionsInfoRaw as (PositionInfoExtended | PositionInfoWithBalanceExtended)[] | undefined) || [];
 
   const positions = positionsInfo.map(info => info.positionId);
   const havePositions = positionsInfoRaw !== undefined && positions.length > 0;
 
-  /* ---------------- Prices (NEW: batched via getAllBackPricesWad) ---------------- */
+  /* ---------------- Prices ---------------- */
   const {
     data: pricesRaw,
     refetch: refetchMarketPrices,
@@ -127,15 +128,16 @@ export function useMarketData(id: bigint) {
     },
   });
 
-  // Extract prices and reserve
-  const [allPrices, reservePriceWad] = (pricesRaw || [[], 0n]) as [ {positionId: bigint, priceWad: bigint}[], bigint ];
+  const [allPrices, reservePriceWad] = (pricesRaw || [[], 0n]) as [
+    { positionId: bigint; priceWad: bigint }[],
+    bigint
+  ];
 
   const positionPrices: (number | null)[] = useMemo(() => {
     if (positions.length === 0) return [];
 
-    // Map prices by positionId for lookup
     const priceMap = new Map<bigint, number>();
-    allPrices.forEach(({positionId, priceWad}) => {
+    allPrices.forEach(({ positionId, priceWad }) => {
       const n = Number(priceWad) / 1e18;
       if (Number.isFinite(n)) {
         priceMap.set(positionId, n);
@@ -151,8 +153,8 @@ export function useMarketData(id: bigint) {
 
   /* ---------------- All-or-nothing readiness ---------------- */
   const havePrices = positions.length === 0 || !!pricesRaw;
-
-  const havePosMetaAndBalances = !!positionsInfoRaw && positionsInfo.length === positions.length;
+  const havePosMetaAndBalances =
+    !!positionsInfoRaw && positionsInfo.length === positions.length;
 
   const fullyReady = havePositions && havePrices && havePosMetaAndBalances;
 
@@ -186,7 +188,11 @@ export function useMarketData(id: bigint) {
     positionsInfo,
     positionPrices,
     address,
+    id,
   ]);
+
+  const previousRows = usePrevious(rows) || [];
+  const displayRows = fullyReady ? rows : previousRows;
 
   /* ---------------- Sorting ---------------- */
   const {
@@ -194,7 +200,7 @@ export function useMarketData(id: bigint) {
     sort,
     sortKey,
     sortDir,
-  } = useSortedRows(rows);
+  } = useSortedRows(displayRows);
 
   /* ---------------- Refetch all ---------------- */
   const refetchAll = async () => {
@@ -205,15 +211,8 @@ export function useMarketData(id: bigint) {
     ]);
   };
 
-  /* ---------------- Combined loading flag ---------------- */
   const isLoading =
-    !fullyReady ||
-    isLoadingMarketMeta ||
-    isFetchingMarketMeta ||
-    isLoadingPositionsInfo ||
-    isFetchingPositionsInfo ||
-    isLoadingPrices ||
-    isFetchingPrices;
+    isLoadingMarketMeta || isLoadingPositionsInfo || isLoadingPrices;
 
   return {
     marketName,
@@ -226,4 +225,4 @@ export function useMarketData(id: bigint) {
     refetchAll,
     isLoading,
   };
-};
+}
