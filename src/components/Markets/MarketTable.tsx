@@ -1,16 +1,11 @@
 // src/components/Markets/MarketTable.tsx
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React from 'react';
 import { useMarketData } from '../../hooks/useMarketData';
-import { PositionPill } from '../PositionPill';
+import { MarketTableView } from './MarketTableView';
 
-type MarketTableProps = {
-  id: bigint;
-  onAfterTx?: () => Promise<unknown> | void;
-};
-
-// Shared exposure formatter (0dp, green for +, red for 0 / -)
+// Shared exposure formatter for OTHER row (0dp)
 function formatExposure(value: number) {
   if (!Number.isFinite(value)) {
     return { label: '$0', className: 'text-danger' };
@@ -30,13 +25,18 @@ function formatExposure(value: number) {
   return { label: '$0', className: 'text-danger' };
 }
 
+type MarketTableProps = {
+  id: bigint;
+  onAfterTx?: () => Promise<unknown> | void;
+};
+
 export function MarketTable({ id, onAfterTx }: MarketTableProps) {
   const {
     marketName,
-    marketTicker,
+    marketTicker, // kept if we want it later
     rows,
     reservePrice,
-    reserveExposure, // OTHER exposure (number, 6dp scaled)
+    reserveExposure,
     sort,
     sortKey,
     sortDir,
@@ -44,201 +44,50 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
     isLoading,
   } = useMarketData(id);
 
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const title = marketName || `Market #${id.toString()}`;
 
-  const icon = (k: string) =>
-    sortKey !== k ? '↕' : sortDir === 'asc' ? '↑' : '↓';
-
-  const runRefresh = async (withGlobal?: boolean) => {
-    setIsRefreshing(true);
-    try {
-      await refetchAll();
-
-      if (withGlobal && onAfterTx) {
-        await onAfterTx();
-      }
-    } finally {
-      setIsRefreshing(false);
+  // After a tx from any PositionPill: refetch this market + bubble up
+  const handlePositionAfterTx = async () => {
+    await refetchAll();
+    if (onAfterTx) {
+      await onAfterTx();
     }
   };
 
-  const handleAfterTx = async () => {
-    await runRefresh(true);
-  };
+  // OTHER row view-model
+  const hasReservePrice =
+    typeof reservePrice === 'number' && reservePrice != null;
 
-  const handleManualRefresh = async () => {
-    await runRefresh(false);
-  };
+  const showOtherRow = hasReservePrice;
 
-  // ─────────────────────────────────────────────
-  // Derived values (NO hooks below this point)
-  // ─────────────────────────────────────────────
+  let otherBackLabel = '—';
+  let otherLayLabel = '—';
 
-  const hasReservePrice = typeof reservePrice === 'number';
-
-  // Lay(OTHER) = 1 - price(OTHER)
-  const otherLayPrice =
-    hasReservePrice && reservePrice != null
-      ? Math.max(0, Math.min(1, 1 - reservePrice))
-      : null;
-
-  const otherBackLabel =
-    hasReservePrice && reservePrice != null
-      ? `$${reservePrice.toFixed(4)}`
-      : '—';
-
-  const otherLayLabel =
-    otherLayPrice != null ? `$${otherLayPrice.toFixed(4)}` : '—';
-
-  const otherExposureFmt = useMemo(
-    () => formatExposure(reserveExposure),
-    [reserveExposure],
-  );
-
-  // Early return AFTER all hooks are declared
-  if (isLoading) {
-    return (
-      <div className="text-center py-3">
-        <span
-          className="spinner-border text-secondary"
-          role="status"
-          aria-hidden="true"
-        />
-        <div className="text-muted mt-2">
-          Loading prices &amp; balances…
-        </div>
-      </div>
-    );
+  if (hasReservePrice) {
+    const back = reservePrice as number;
+    const lay = Math.max(0, Math.min(1, 1 - back));
+    otherBackLabel = `$${back.toFixed(4)}`;
+    otherLayLabel = `$${lay.toFixed(4)}`;
   }
 
+  const { label: otherExposureLabel, className: otherExposureClassName } =
+    formatExposure(reserveExposure);
+
   return (
-    <div className="list-group-item mb-3">
-      {/* Header / title row */}
-      <div className="d-flex justify-content-between align-items-center mb-2">
-        <div>
-          <div className="fw-semibold">
-            {marketName || `Market #${id.toString()}`}
-          </div>
-          {marketTicker && (
-            <small className="text-muted">{marketTicker}</small>
-          )}
-        </div>
-        <div className="d-flex align-items-center gap-2">
-          {isRefreshing && (
-            <span
-              className="spinner-border spinner-border-sm text-secondary"
-              role="status"
-              aria-hidden="true"
-            />
-          )}
-          <button
-            type="button"
-            className="btn btn-sm btn-outline-secondary"
-            onClick={handleManualRefresh}
-            disabled={isRefreshing}
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      <div className="table-responsive mb-2">
-        <table className="table table-sm align-middle mb-0">
-          <thead>
-            <tr>
-              <th className="w-25">
-                <button
-                  type="button"
-                  className="btn btn-link p-0 text-decoration-none"
-                  onClick={() => sort('name')}
-                >
-                  Position {icon('name')}
-                </button>
-              </th>
-              <th className="text-end" style={{ width: '12rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-link p-0 text-decoration-none"
-                  onClick={() => sort('balance')}
-                >
-                  Exposure {icon('balance')}
-                </button>
-              </th>
-              <th className="text-end" style={{ width: '14rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-link p-0 text-decoration-none"
-                  onClick={() => sort('price')}
-                >
-                  Price {icon('price')}
-                </button>
-              </th>
-              <th className="text-end" style={{ width: '10rem' }}>
-                Trade
-              </th>
-              <th className="text-end" style={{ width: '9rem' }}>
-                Token
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {rows.map((row) => (
-              <PositionPill
-                key={row.tokenAddress}
-                marketId={id}
-                positionId={row.positionId}
-                name={row.name}
-                ticker={row.ticker}
-                tokenAddress={row.tokenAddress}
-                balance={row.balance}
-                price={row.price}
-                layPrice={row.layPrice}
-                erc20Symbol={row.erc20Symbol}
-                onAfterTx={handleAfterTx}
-              />
-            ))}
-
-            {hasReservePrice && (
-              <tr>
-                {/* Name / label */}
-                <td>
-                  <div
-                    className="text-truncate"
-                    title="OTHER – Unlisted outcomes"
-                  >
-                    <span className="fw-semibold">OTHER</span>{' '}
-                    <span className="text-muted">Unlisted outcomes</span>
-                  </div>
-                </td>
-
-                {/* Exposure formatted like +$25 or $0 (0dp) */}
-                <td className="text-end align-middle">
-                  <span className={otherExposureFmt.className}>
-                    {otherExposureFmt.label}
-                  </span>
-                </td>
-
-                {/* Price column: Back + Lay text, Back prominent */}
-                <td className="align-middle">
-                  <div className="text-end">
-                    <div className="fw-semibold text-primary">
-                      Back&nbsp;{otherBackLabel}
-                    </div>
-                    <div className="small text-muted">
-                      Lay&nbsp;{otherLayLabel}
-                    </div>
-                  </div>
-                </td>
-
-                {/* Empty Trade / Token cells */}
-                <td className="align-middle text-end">—</td>
-                <td className="align-middle text-end">—</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <MarketTableView
+      id={id}
+      title={title}
+      rows={rows}
+      sort={sort}
+      sortKey={sortKey}
+      sortDir={sortDir}
+      isLoading={isLoading}
+      onPositionAfterTx={handlePositionAfterTx}
+      showOtherRow={showOtherRow}
+      otherExposureLabel={otherExposureLabel}
+      otherExposureClassName={otherExposureClassName}
+      otherBackLabel={otherBackLabel}
+      otherLayLabel={otherLayLabel}
+    />
   );
 }

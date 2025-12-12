@@ -10,11 +10,12 @@ export type PositionRow = {
   positionId: bigint;
   name: string;
   ticker: string;
-  tokenAddress: `0x${string}`; // Back mirror token
-  erc20Symbol: string;         // base symbol from LedgerViews
-  balance: number;             // Back balance (decimals = 6)
-  price: number | null;        // 0–1 (Back price)
-  layPrice: number | null;     // 0–1 (Lay price from LMSR)
+  tokenAddress: `0x${string}`;
+  erc20Symbol: string;
+  balance: number;      // BACK exposure
+  layBalance: number;   // LAY exposure
+  price: number | null;
+  layPrice: number | null;
 };
 
 // Struct types mirroring LedgerViews
@@ -72,6 +73,8 @@ export function useMarketData(id: bigint) {
       erc20Symbol: string;
       backToken?: `0x${string}`;
       backBalance?: bigint;
+      layToken?: `0x${string}`;
+      layBalance?: bigint;
     };
 
     const map = new Map<bigint, Logical>();
@@ -95,9 +98,15 @@ export function useMarketData(id: bigint) {
         if ('balance' in info) {
           entry.backBalance = info.balance ?? 0n;
         }
+      } else {
+        entry.layToken = info.tokenAddress as `0x${string}`;
+        if ('balance' in info) {
+          entry.layBalance = info.balance ?? 0n;
+        }
       }
     }
 
+    // Only keep entries that actually have a Back token listed
     return Array.from(map.values()).filter((e) => !!e.backToken);
   }, [rawInfos]);
 
@@ -191,7 +200,10 @@ export function useMarketData(id: bigint) {
 
     return logicalPositions.map((entry, idx) => {
       const balanceRaw = entry.backBalance ?? 0n;
+      const layBalanceRaw = entry.layBalance ?? 0n;
+
       const balance = Number(balanceRaw) / 1e6;
+      const layBalance = Number(layBalanceRaw) / 1e6;
 
       return {
         positionId: entry.positionId,
@@ -199,7 +211,8 @@ export function useMarketData(id: bigint) {
         ticker: entry.ticker,
         tokenAddress: entry.backToken as `0x${string}`,
         erc20Symbol: entry.erc20Symbol,
-        balance,
+        balance,           // Back
+        layBalance,        // Lay
         price: positionPrices[idx],
         layPrice: layPrices[idx],
       };
