@@ -15,6 +15,7 @@ export type PositionRow = {
   erc20Symbol: string;         // base symbol from LedgerViews
   balance: number;             // Back balance (decimals = 6)
   price: number | null;        // 0–1 (Back price)
+  layPrice: number | null;     // 0–1 (Lay price from LMSR)
 };
 
 // Struct types mirroring LedgerViews
@@ -112,7 +113,7 @@ export function useMarketData(id: bigint) {
       erc20Symbol: string;
       backToken?: `0x${string}`;
       backBalance?: bigint;
-      // layToken / layBalance can be stored later if needed
+      // layToken / layBalance could be added later
     };
 
     const map = new Map<bigint, Logical>();
@@ -137,10 +138,11 @@ export function useMarketData(id: bigint) {
           entry.backBalance = info.balance ?? 0n;
         }
       } else {
-        // Lay side – ignore for now, but could be stored here
+        // Lay side – ignored for now (no separate lay token in this table)
       }
     }
 
+    // Only keep entries that actually have a Back token listed
     return Array.from(map.values()).filter((e) => !!e.backToken);
   }, [rawInfos]);
 
@@ -148,7 +150,9 @@ export function useMarketData(id: bigint) {
   const havePositions =
     positionsInfoRaw !== undefined && logicalPositions.length > 0;
 
-  /* ---------------- Prices (Back prices only) ---------------- */
+  /* ---------------- Prices (Back + Lay, via LMSR) ---------------- */
+
+  // BACK prices + reserve (Other) price
   const {
     data: pricesRaw,
     refetch: refetchMarketPrices,
@@ -168,6 +172,21 @@ export function useMarketData(id: bigint) {
     bigint
   ];
 
+  // LAY prices
+  const {
+    data: layPricesRaw,
+    refetch: refetchLayPrices,
+    isLoading: isLoadingLayPrices,
+  } = useReadContract({
+    address: lmsr as `0x${string}`,
+    abi: ABIS.lmsr,
+    functionName: 'getAllLayPricesWad',
+    args: [id],
+    query: {
+      enabled: positions.length > 0,
+    },
+  });
+
   const positionPrices: (number | null)[] = useMemo(() => {
     if (positions.length === 0) return [];
 
@@ -181,6 +200,26 @@ export function useMarketData(id: bigint) {
 
     return positions.map((posId) => priceMap.get(posId) ?? null);
   }, [allPrices, positions]);
+
+  const layPriceByPosId: Map<bigint, number> = useMemo(() => {
+    const map = new Map<bigint, number>();
+    if (!layPricesRaw) return map;
+
+    (layPricesRaw as { positionId: bigint; priceWad: bigint }[]).forEach(
+      ({ positionId, priceWad }) => {
+        const n = Number(priceWad) / 1e18;
+        if (Number.isFinite(n)) {
+          map.set(positionId, n);
+        }
+      }
+    );
+    return map;
+  }, [layPricesRaw]);
+
+  const layPrices: (number | null)[] = useMemo(
+    () => positions.map((posId) => layPriceByPosId.get(posId) ?? null),
+    [positions, layPriceByPosId]
+  );
 
   let reservePrice: number | null = null;
   const reserveN = Number(reservePriceWad) / 1e18;
@@ -230,12 +269,12 @@ export function useMarketData(id: bigint) {
   }, [otherExposureRaw]);
 
   const previousOtherExposure = usePrevious(otherExposure) ?? 0;
-  const reserveExposure = otherExposureRaw !== undefined
-    ? otherExposure
-    : previousOtherExposure;
+  const reserveExposure =
+    otherExposureRaw !== undefined ? otherExposure : previousOtherExposure;
 
   /* ---------------- All-or-nothing readiness ---------------- */
-  const havePrices = positions.length === 0 || !!pricesRaw;
+  const havePrices =
+    positions.length === 0 || (!!pricesRaw && !!layPricesRaw);
   const fullyReady = havePositions && havePrices && !!positionsInfoRaw;
 
   /* ---------------- Rows (one per logical position) ---------------- */
@@ -262,9 +301,10 @@ export function useMarketData(id: bigint) {
         erc20Symbol: entry.erc20Symbol,
         balance,
         price: positionPrices[idx],
+        layPrice: layPrices[idx],
       };
     });
-  }, [fullyReady, logicalPositions, positionPrices, id]);
+  }, [fullyReady, logicalPositions, positionPrices, layPrices, id]);
 
   const previousRows = usePrevious(rows) || [];
   const displayRows = fullyReady ? rows : previousRows;
@@ -278,6 +318,7 @@ export function useMarketData(id: bigint) {
       refetchMarketMeta?.(),
       refetchPositionsInfo?.(),
       refetchMarketPrices?.(),
+      refetchLayPrices?.(),
       // include reserve exposure in the "transaction refresh"
       address ? refetchReserveExposure?.() : undefined,
     ]);
@@ -287,6 +328,7 @@ export function useMarketData(id: bigint) {
     isLoadingMarketMeta ||
     isLoadingPositionsInfo ||
     isLoadingPrices ||
+    isLoadingLayPrices ||
     isLoadingReserveExposure;
 
   return {

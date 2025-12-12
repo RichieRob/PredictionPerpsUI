@@ -2,7 +2,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { PriceBar } from './PriceBar';
 import { TxStatusBanner } from './TxStatusBanner';
 import { usePositionPill } from '../hooks/PositionPill/usePositionPill';
 
@@ -13,7 +12,8 @@ type PositionPillProps = {
   ticker: string;
   tokenAddress: `0x${string}`;
   balance: number;
-  price: number | null;
+  price: number | null;      // Back price
+  layPrice: number | null;  // Lay price (from LMSR)
   erc20Symbol: string;
   onAfterTx?: () => Promise<unknown> | void;
 };
@@ -26,6 +26,7 @@ export function PositionPill({
   tokenAddress,
   balance,
   price,
+  layPrice,
   erc20Symbol,
   onAfterTx,
 }: PositionPillProps) {
@@ -51,8 +52,16 @@ export function PositionPill({
     onAfterTx,
   });
 
-  const clamped = price != null ? Math.max(0, Math.min(price, 1)) : null;
-  const priceLabel = clamped != null ? `$${clamped.toFixed(6)}` : '–';
+  // Back / Lay clamped to [0,1]
+  const clampedBack = price != null ? Math.max(0, Math.min(price, 1)) : null;
+  const clampedLay =
+    layPrice != null ? Math.max(0, Math.min(layPrice, 1)) : null;
+
+  const priceLabelBack =
+    clampedBack != null ? `$${clampedBack.toFixed(4)}` : '–';
+  const priceLabelLay =
+    clampedLay != null ? `$${clampedLay.toFixed(4)}` : '–';
+
   const balanceLabel = Number.isFinite(balance) ? balance.toFixed(0) : '0';
 
   // Fade triggers
@@ -60,12 +69,13 @@ export function PositionPill({
   const [fadeBalance, setFadeBalance] = useState(false);
 
   useEffect(() => {
-    if (price !== null) {
+    // Fade whenever either price moves
+    if (price !== null || layPrice !== null) {
       setFadePrice(true);
       const timer = setTimeout(() => setFadePrice(false), 300);
       return () => clearTimeout(timer);
     }
-  }, [price]);
+  }, [price, layPrice]);
 
   useEffect(() => {
     setFadeBalance(true);
@@ -74,6 +84,21 @@ export function PositionPill({
   }, [balance]);
 
   const isBusyCurrent = side === 'back' ? isBusyBack : isBusyLay;
+
+  // Decide which one is prominent (top) based on current side
+  const isBackProminent = side === 'back';
+
+  const topLabel = isBackProminent
+    ? `Back ${priceLabelBack}`
+    : `Lay ${priceLabelLay}`;
+
+  const bottomLabel = isBackProminent
+    ? `Lay ${priceLabelLay}`
+    : `Back ${priceLabelBack}`;
+
+  const topClass = isBackProminent
+    ? 'fw-semibold text-primary'
+    : 'fw-semibold text-danger'; // blue for back, red for lay
 
   return (
     <tr>
@@ -96,20 +121,15 @@ export function PositionPill({
       </td>
 
       <td className="align-middle">
-        <div className="d-flex flex-column">
-          <div className="fw-semibold text-primary text-end mb-1">
-            <span
-              style={{
-                transition: 'opacity 0.3s ease',
-                opacity: fadePrice ? 0.5 : 1,
-              }}
-            >
-              {priceLabel}
-            </span>
-          </div>
-          <div className="d-flex justify-content-end">
-            <PriceBar price={clamped} />
-          </div>
+        <div
+          className="text-end"
+          style={{
+            transition: 'opacity 0.3s ease',
+            opacity: fadePrice ? 0.5 : 1,
+          }}
+        >
+          <div className={topClass}>{topLabel}</div>
+          <div className="small text-muted">{bottomLabel}</div>
         </div>
       </td>
 
@@ -127,7 +147,8 @@ export function PositionPill({
           />
 
           <div className="d-flex justify-content-end align-items-center gap-2 mt-1">
-            {/* Back/Lay toggle controlling how the ppUSDC input is interpreted */}
+            {/* Back/Lay toggle controlling how the ppUSDC input is interpreted
+                AND which price is prominent */}
             <div
               className="btn-group btn-group-sm"
               role="group"

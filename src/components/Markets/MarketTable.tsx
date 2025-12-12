@@ -4,7 +4,6 @@
 import React, { useState } from 'react';
 import { useMarketData } from './useMarketData';
 import { PositionPill } from '../PositionPill';
-import { PriceBar } from '../PriceBar';
 import { addTokensToMetaMask } from '../../utils/addTokenToMetaMask';
 
 type MarketTableProps = {
@@ -18,7 +17,7 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
     marketTicker,
     rows,
     reservePrice,
-    reserveExposure, // NEW: OTHER exposure (number, 6dp scaled)
+    reserveExposure, // OTHER exposure (number, 6dp scaled)
     sort,
     sortKey,
     sortDir,
@@ -97,6 +96,18 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
 
   const hasReservePrice = typeof reservePrice === 'number';
 
+  // Lay(OTHER) = 1 - price(OTHER)
+  const otherLayPrice =
+    hasReservePrice && reservePrice != null
+      ? Math.max(0, Math.min(1, 1 - reservePrice))
+      : null;
+  const otherBackLabel =
+    hasReservePrice && reservePrice != null
+      ? `$${reservePrice.toFixed(4)}`
+      : '—';
+  const otherLayLabel =
+    otherLayPrice != null ? `$${otherLayPrice.toFixed(4)}` : '—';
+
   return (
     <div className="list-group-item mb-3">
       <div className="d-flex justify-content-between align-items-center mb-2">
@@ -160,7 +171,7 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
                   className="btn btn-link p-0 text-decoration-none"
                   onClick={() => sort('balance')}
                 >
-                  Balance {icon('balance')}
+                  Exposure {icon('balance')}
                 </button>
               </th>
               <th className="text-end">
@@ -187,46 +198,46 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
                 tokenAddress={row.tokenAddress}
                 balance={row.balance}
                 price={row.price}
+                layPrice={row.layPrice}
                 erc20Symbol={row.erc20Symbol}
                 onAfterTx={handleAfterTx}
               />
             ))}
 
-  {hasReservePrice && (
-  <tr>
-    {/* Name / label */}
-    <td>
-      <div>
-        <strong>OTHER</strong>{' '}
-        <span className="text-muted">Unlisted outcomes</span>
-      </div>
-    </td>
+            {hasReservePrice && (
+              <tr>
+                {/* Name / label */}
+                <td>
+                  <div>
+                    <strong>OTHER</strong>{' '}
+                    <span className="text-muted">Unlisted outcomes</span>
+                  </div>
+                </td>
 
-    {/* Balance (use same precision as normal rows) */}
-    <td className="text-end align-middle">
-      {reserveExposure.toFixed(0)}
-    </td>
+                {/* Balance (use same precision as normal rows) */}
+                <td className="text-end align-middle">
+                  {reserveExposure.toFixed(0)}
+                </td>
 
-    {/* Price (same formatting + fade logic as PositionPill) */}
-    <td className="align-middle">
-      <div className="d-flex flex-column">
-        <div className="fw-semibold text-primary text-end mb-1">
-          ${reservePrice!.toFixed(6)}
-        </div>
-        <div className="d-flex justify-content-end">
-          <PriceBar price={reservePrice!} />
-        </div>
-      </div>
-    </td>
+                {/* Price column: Back + Lay text, Back prominent */}
+                <td className="align-middle">
+                  <div className="text-end">
+                    <div className="fw-semibold text-primary">
+                      Back&nbsp;{otherBackLabel}
+                    </div>
+                    <div className="small text-muted">
+                      Lay&nbsp;{otherLayLabel}
+                    </div>
+                  </div>
+                </td>
 
-    {/* Empty Trade column */}
-    <td className="align-middle text-end">—</td>
+                {/* Empty Trade column */}
+                <td className="align-middle text-end">—</td>
 
-    {/* Empty Token column */}
-    <td className="align-middle text-end">—</td>
-  </tr>
-)}
-
+                {/* Empty Token column */}
+                <td className="align-middle text-end">—</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
