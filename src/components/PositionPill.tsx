@@ -95,12 +95,14 @@ export function PositionPill({
 
   return (
     <tr>
-      {/* Position name */}
+       {/* Position name */}
       <td>
         <div>
           <strong>{name || ticker || positionId.toString()}</strong>
+          <div className="text-muted small">#{positionId.toString()}</div>
         </div>
       </td>
+
 
       {/* Back Exposure + Liquidate button */}
       <td className="text-end align-middle">

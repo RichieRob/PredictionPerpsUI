@@ -9,6 +9,7 @@ import { MockUsdcPanel } from '../components/MockUsdcPanel';
 
 import { useWalletBalances } from '../hooks/useWalletBalances';
 import { useMarketsList } from '../hooks/useMarketsList';
+import Link from 'next/link';
 
 export default function HomePage() {
   // Wallet (balances + refetch)
@@ -40,11 +41,19 @@ export default function HomePage() {
   };
 
   return (
+    
     <div className="container py-4">
-      <header className="d-flex justify-content-between align-items-center mb-4">
-        <h1 className="h4 mb-0">Prediction Perps</h1>
-        <ConnectButton />
-      </header>
+<header className="d-flex justify-content-between align-items-center mb-4">
+  <h1 className="h4 mb-0">Prediction Perps</h1>
+
+  <div className="d-flex align-items-center gap-2">
+    <Link href="/create-market" className="btn btn-primary btn-sm">
+      Create market
+    </Link>
+    <ConnectButton />
+  </div>
+</header>
+
 
       {address && (
         <>

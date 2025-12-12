@@ -7,24 +7,18 @@ import { useResettableStatus } from './useResettableStatus';
 export type TxStatus = 'idle' | 'pending' | 'success' | 'error';
 
 type UseLedgerTxArgs = {
-  // Global after-tx handler (e.g. refresh top-level balances / markets)
   onAfterTx?: () => Promise<unknown> | void;
 };
 
 type RunTxOptions = {
-  // Extra “local” refreshes for this specific component (e.g. position balance, market prices)
   onLocalAfterTx?: () => Promise<unknown> | void;
 };
 
 export function useLedgerTx({ onAfterTx }: UseLedgerTxArgs) {
   const publicClient = usePublicClient();
 
-  const {
-    status,
-    setStatus,
-    errorMessage,
-    setErrorMessage,
-  } = useResettableStatus<TxStatus>('idle');
+  const { status, setStatus, errorMessage, setErrorMessage } =
+    useResettableStatus<TxStatus>('idle');
 
   const runTx = async (
     send: () => Promise<`0x${string}`>,
@@ -32,7 +26,7 @@ export function useLedgerTx({ onAfterTx }: UseLedgerTxArgs) {
   ) => {
     if (!publicClient) {
       setErrorMessage('RPC client not ready.');
-      return;
+      return null;
     }
 
     setErrorMessage(null);
@@ -42,19 +36,13 @@ export function useLedgerTx({ onAfterTx }: UseLedgerTxArgs) {
       const txHash = await send();
       console.log('📡 Ledger tx hash:', txHash);
 
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-      // 1) Local component-level refresh
-      if (options?.onLocalAfterTx) {
-        await options.onLocalAfterTx();
-      }
-
-      // 2) Global app-level refresh from page.tsx
-      if (onAfterTx) {
-        await onAfterTx();
-      }
+      if (options?.onLocalAfterTx) await options.onLocalAfterTx();
+      if (onAfterTx) await onAfterTx();
 
       setStatus('success');
+      return { txHash, receipt };
     } catch (err: any) {
       console.error('❌ Ledger tx failed:', err);
       const short =
@@ -65,6 +53,7 @@ export function useLedgerTx({ onAfterTx }: UseLedgerTxArgs) {
         'Transaction failed';
       setErrorMessage(short);
       setStatus('error');
+      return null;
     }
   };
 

@@ -4,6 +4,7 @@
 import React from 'react';
 import { useMarketData } from '../../hooks/useMarketData';
 import { MarketTableView } from './MarketTableView';
+import { ResolveMarketBox } from './ResolveMarketBox';
 
 // Shared exposure formatter for OTHER row (0dp)
 function formatExposure(value: number) {
@@ -74,20 +75,24 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
     formatExposure(reserveExposure);
 
   return (
-    <MarketTableView
-      id={id}
-      title={title}
-      rows={rows}
-      sort={sort}
-      sortKey={sortKey}
-      sortDir={sortDir}
-      isLoading={isLoading}
-      onPositionAfterTx={handlePositionAfterTx}
-      showOtherRow={showOtherRow}
-      otherExposureLabel={otherExposureLabel}
-      otherExposureClassName={otherExposureClassName}
-      otherBackLabel={otherBackLabel}
-      otherLayLabel={otherLayLabel}
-    />
+    <>
+      <MarketTableView
+        id={id}
+        title={title}
+        rows={rows}
+        sort={sort}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        isLoading={isLoading}
+        onPositionAfterTx={handlePositionAfterTx}
+        showOtherRow={showOtherRow}
+        otherExposureLabel={otherExposureLabel}
+        otherExposureClassName={otherExposureClassName}
+        otherBackLabel={otherBackLabel}
+        otherLayLabel={otherLayLabel}
+      />
+
+      <ResolveMarketBox marketId={id} onAfterTx={handlePositionAfterTx} />
+    </>
   );
 }

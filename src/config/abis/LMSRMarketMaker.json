@@ -288,104 +288,19 @@
           "internalType": "uint256",
           "name": "marketId",
           "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "positionId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "bool",
-          "name": "isBack",
-          "type": "bool"
-        },
-        {
-          "internalType": "uint256",
-          "name": "t",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "minUSDCOut",
-          "type": "uint256"
-        }
-      ],
-      "name": "applySellExactTokens",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "usdcOut",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "positionId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "bool",
-          "name": "isBack",
-          "type": "bool"
-        },
-        {
-          "internalType": "uint256",
-          "name": "usdcOut",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "maxTokensIn",
-          "type": "uint256"
-        }
-      ],
-      "name": "applySellForUSDC",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "tokensIn",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
         }
       ],
       "name": "getAllBackPricesWad",
       "outputs": [
         {
-          "components": [
-            {
-              "internalType": "uint256",
-              "name": "positionId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "priceWad",
-              "type": "uint256"
-            }
-          ],
-          "internalType": "struct LMSRMarketMaker.PositionPrice[]",
-          "name": "prices",
-          "type": "tuple[]"
+          "internalType": "uint256[]",
+          "name": "positionIds",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "priceWads",
+          "type": "uint256[]"
         },
         {
           "internalType": "uint256",
@@ -407,21 +322,14 @@
       "name": "getAllLayPricesWad",
       "outputs": [
         {
-          "components": [
-            {
-              "internalType": "uint256",
-              "name": "positionId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "priceWad",
-              "type": "uint256"
-            }
-          ],
-          "internalType": "struct LMSRMarketMaker.PositionPrice[]",
-          "name": "prices",
-          "type": "tuple[]"
+          "internalType": "uint256[]",
+          "name": "positionIds",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "priceWads",
+          "type": "uint256[]"
         }
       ],
       "stateMutability": "view",

@@ -2,6 +2,8 @@ import marketMakerLedgerAbiJson from './abis/MarketMakerLedger.json';
 import ppUsdcAbiJson from './abis/PpUSDC.json';
 import lmsrAbiJson from './abis/LMSRMarketMaker.json';
 import ledgerViewsAbiJson from './abis/LedgerViews.json'
+import mockOracleAbiJson from './abis/MockOracle.json';
+
 
 import deploymentsJson from '../../../PredictionPerpsContractsV2/deployments.json';
 
@@ -13,12 +15,14 @@ interface CoreDeployment {
   MockUSDC: string;
   MockAUSDC: string;
   MockAavePool: string;
+  MockOracle: string; // <—
   PpUSDC: string;
   Ledger: string;
   LedgerViews: string;
   PositionERC20: string;
   Permit2: string;
 }
+
 
 interface LmsrDeployment {
   LMSRMarketMaker: string;
@@ -52,6 +56,7 @@ export const CONTRACTS = {
     usdc:         deployments.core.MockUSDC,
     ausdc:        deployments.core.MockAUSDC,
     aavePool:     deployments.core.MockAavePool,
+    mockOracle: deployments.core.MockOracle,
     positionImpl: deployments.core.PositionERC20,
     permit2:      deployments.core.Permit2,
 
@@ -67,4 +72,6 @@ export const ABIS = {
   ledgerViews: (ledgerViewsAbiJson as any).abi,
   ppUSDC: (ppUsdcAbiJson as any).abi,
   lmsr:   (lmsrAbiJson as any).abi,
+    mockOracle: (mockOracleAbiJson as any).abi, // <—
+
 };

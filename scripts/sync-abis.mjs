@@ -14,36 +14,38 @@ const CONTRACTS_ROOT = path.resolve(
 
 const SOURCES = [
   {
-    // Ledger (MarketMakerLedger)
     artifactPath:
       'artifacts/Contracts/Ledger/Ledger.sol/Ledger.json',
     outFile: 'MarketMakerLedger.json',
   },
   {
-    // PpUSDC
     artifactPath:
       'artifacts/Contracts/Ledger/ppUSDC.sol/PpUSDC.json',
     outFile: 'PpUSDC.json',
   },
   {
-    // LMSRMarketMaker
+    // MockOracle ✅
+    artifactPath:
+      'artifacts/Contracts/Ledger/Mocks/MockOracle.sol/MockOracle.json',
+    outFile: 'MockOracle.json',
+  },
+  {
     artifactPath:
       'artifacts/Contracts/AMM/LMSRMarketMaker.sol/LMSRMarketMaker.json',
     outFile: 'LMSRMarketMaker.json',
   },
   {
-    // IntentContract
     artifactPath:
       'artifacts/Contracts/Ledger/IntentContract.sol/IntentContract.json',
     outFile: 'IntentContract.json',
   },
   {
-    // LedgerViews
     artifactPath:
       'artifacts/Contracts/Ledger/LedgerViews.sol/LedgerViews.json',
     outFile: 'LedgerViews.json',
   },
 ];
+
 
 const DEST_DIR = path.resolve(__dirname, '..', 'src', 'config', 'abis');
 
