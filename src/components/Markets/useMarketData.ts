@@ -11,13 +11,13 @@ export type PositionRow = {
   positionId: bigint;
   name: string;
   ticker: string;
-  tokenAddress: `0x${string}`; // we use the Back mirror token for now
+  tokenAddress: `0x${string}`; // Back mirror token
   erc20Symbol: string;         // base symbol from LedgerViews
-  balance: number;             // balance of the Back mirror (decimals = 6)
+  balance: number;             // Back balance (decimals = 6)
   price: number | null;        // 0–1 (Back price)
 };
 
-// These TS types mirror the structs returned by LedgerViews
+// Struct types mirroring LedgerViews
 type PositionInfoExtended = {
   positionId: bigint;
   isBack: boolean;
@@ -97,18 +97,13 @@ export function useMarketData(id: bigint) {
     }
   }, [positionsInfoRaw, id]);
 
-  // Raw array from LedgerViews (Back + Lay entries)
   const rawInfos =
     (positionsInfoRaw as
       | PositionInfoExtended[]
       | PositionInfoWithBalanceExtended[]
       | undefined) || [];
 
-  /**
-   * Collapse Back + Lay mirrors into ONE logical row per positionId.
-   * - We take the Back mirror as the "primary" token for display.
-   * - Balance shown = Back mirror balance (0 if viewer not connected).
-   */
+  /* ---------------- Collapse Back + Lay into logical positions ---------------- */
   const logicalPositions = useMemo(() => {
     type Logical = {
       positionId: bigint;
@@ -117,7 +112,7 @@ export function useMarketData(id: bigint) {
       erc20Symbol: string;
       backToken?: `0x${string}`;
       backBalance?: bigint;
-      // layToken / layBalance can be added later if we want them in the UI
+      // layToken / layBalance can be stored later if needed
     };
 
     const map = new Map<bigint, Logical>();
@@ -142,10 +137,7 @@ export function useMarketData(id: bigint) {
           entry.backBalance = info.balance ?? 0n;
         }
       } else {
-        // Lay side – we ignore for display right now,
-        // but we could store layToken/layBalance here for future use.
-        // e.g. entry.layToken = info.tokenAddress;
-        //      entry.layBalance = info.balance ?? 0n;
+        // Lay side – ignore for now, but could be stored here
       }
     }
 
@@ -194,6 +186,54 @@ export function useMarketData(id: bigint) {
   const reserveN = Number(reservePriceWad) / 1e18;
   if (Number.isFinite(reserveN)) reservePrice = reserveN;
 
+  /* ---------------- OTHER exposure (getReserveExposure) ---------------- */
+  const {
+    data: reserveExposureRaw,
+    refetch: refetchReserveExposure,
+    isLoading: isLoadingReserveExposure,
+  } = useReadContract({
+    address: ledger as `0x${string}`,
+    abi: ABIS.ledger,
+    functionName: 'getReserveExposure',
+    // Only call if we have an account
+    args: address ? [address, id] : undefined,
+    query: {
+      enabled: !!address,
+    },
+  });
+
+  useEffect(() => {
+    if (!address) {
+      console.log(
+        '[useMarketData] getReserveExposure skipped: no account',
+        { marketId: id.toString() }
+      );
+      return;
+    }
+
+    console.log(
+      '[useMarketData] getReserveExposure returned:',
+      reserveExposureRaw,
+      'for marketId =',
+      id.toString(),
+      'account =',
+      address
+    );
+  }, [reserveExposureRaw, address, id]);
+
+  const otherExposureRaw = reserveExposureRaw as bigint | undefined;
+
+  const otherExposure = useMemo(() => {
+    if (!otherExposureRaw) return 0;
+    const n = Number(otherExposureRaw) / 1e6; // 6 decimals
+    return Number.isFinite(n) ? n : 0;
+  }, [otherExposureRaw]);
+
+  const previousOtherExposure = usePrevious(otherExposure) ?? 0;
+  const reserveExposure = otherExposureRaw !== undefined
+    ? otherExposure
+    : previousOtherExposure;
+
   /* ---------------- All-or-nothing readiness ---------------- */
   const havePrices = positions.length === 0 || !!pricesRaw;
   const fullyReady = havePositions && havePrices && !!positionsInfoRaw;
@@ -238,17 +278,23 @@ export function useMarketData(id: bigint) {
       refetchMarketMeta?.(),
       refetchPositionsInfo?.(),
       refetchMarketPrices?.(),
+      // include reserve exposure in the "transaction refresh"
+      address ? refetchReserveExposure?.() : undefined,
     ]);
   };
 
   const isLoading =
-    isLoadingMarketMeta || isLoadingPositionsInfo || isLoadingPrices;
+    isLoadingMarketMeta ||
+    isLoadingPositionsInfo ||
+    isLoadingPrices ||
+    isLoadingReserveExposure;
 
   return {
     marketName,
     marketTicker,
     rows: sortedRows,
     reservePrice,
+    reserveExposure, // OTHER balance, 6dp → number
     sort,
     sortKey,
     sortDir,

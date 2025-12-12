@@ -6,7 +6,6 @@ import { useMarketData } from './useMarketData';
 import { PositionPill } from '../PositionPill';
 import { PriceBar } from '../PriceBar';
 import { addTokensToMetaMask } from '../../utils/addTokenToMetaMask';
-// src/components/Markets/MarketTable.tsx
 
 type MarketTableProps = {
   id: bigint;
@@ -19,6 +18,7 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
     marketTicker,
     rows,
     reservePrice,
+    reserveExposure, // NEW: OTHER exposure (number, 6dp scaled)
     sort,
     sortKey,
     sortDir,
@@ -79,7 +79,7 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
     }
   };
 
-  // Show spinner only for initial load; for refreshes, show in header without hiding table
+  // Initial load spinner
   if (isLoading) {
     return (
       <div className="text-center py-3">
@@ -94,6 +94,8 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
       </div>
     );
   }
+
+  const hasReservePrice = typeof reservePrice === 'number';
 
   return (
     <div className="list-group-item mb-3">
@@ -176,38 +178,58 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
           </thead>
           <tbody>
             {rows.map((row) => (
-           <PositionPill
-  key={row.tokenAddress}   // unique across Back/Lay
-  marketId={id}
-  positionId={row.positionId}
-  name={row.name}
-  ticker={row.ticker}
-  tokenAddress={row.tokenAddress}
-  balance={row.balance}
-  price={row.price}
-  erc20Symbol={row.erc20Symbol}
-  onAfterTx={handleAfterTx}
-/>
-
+              <PositionPill
+                key={row.tokenAddress}
+                marketId={id}
+                positionId={row.positionId}
+                name={row.name}
+                ticker={row.ticker}
+                tokenAddress={row.tokenAddress}
+                balance={row.balance}
+                price={row.price}
+                erc20Symbol={row.erc20Symbol}
+                onAfterTx={handleAfterTx}
+              />
             ))}
+
+  {hasReservePrice && (
+  <tr>
+    {/* Name / label */}
+    <td>
+      <div>
+        <strong>OTHER</strong>{' '}
+        <span className="text-muted">Unlisted outcomes</span>
+      </div>
+    </td>
+
+    {/* Balance (use same precision as normal rows) */}
+    <td className="text-end align-middle">
+      {reserveExposure.toFixed(0)}
+    </td>
+
+    {/* Price (same formatting + fade logic as PositionPill) */}
+    <td className="align-middle">
+      <div className="d-flex flex-column">
+        <div className="fw-semibold text-primary text-end mb-1">
+          ${reservePrice!.toFixed(6)}
+        </div>
+        <div className="d-flex justify-content-end">
+          <PriceBar price={reservePrice!} />
+        </div>
+      </div>
+    </td>
+
+    {/* Empty Trade column */}
+    <td className="align-middle text-end">—</td>
+
+    {/* Empty Token column */}
+    <td className="align-middle text-end">—</td>
+  </tr>
+)}
+
           </tbody>
         </table>
       </div>
-
-      {reservePrice != null && (
-        <div className="border rounded p-2 bg-light">
-          <div className="d-flex justify-content-between align-items-center mb-1">
-            <div>
-              <strong>OTHER</strong>{' '}
-              <span className="text-muted">Unlisted outcomes</span>
-            </div>
-            <div className="fw-semibold text-primary">
-              ${reservePrice.toFixed(3)}
-            </div>
-          </div>
-          <PriceBar price={reservePrice} />
-        </div>
-      )}
     </div>
   );
 }
