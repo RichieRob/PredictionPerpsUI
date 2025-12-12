@@ -24,6 +24,10 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
     withdrawStatus,
     depositErrorMessage,
     withdrawErrorMessage,
+    handleAddUSDCToMetaMask,
+    handleAddPpUSDCToMetaMask,
+    usdcAdded,
+    ppAdded,
   } = useWalletPanel({ onAfterTx });
 
   return (
@@ -32,12 +36,36 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
       <p className="mb-2 text-muted"></p>
 
       <div className="border rounded p-3">
-        <div className="d-flex flex-column flex-md-row justify-content-between mb-3">
-          <div className="mb-2 mb-md-0">
+        <div className="d-flex flex-column flex-md-row justify-content-between mb-3 gap-2">
+          <div className="mb-2 mb-md-0 d-flex align-items-center gap-2">
             <strong>USDC:</strong> {usdcBalance.toFixed(2)}
+            <button
+              type="button"
+              className={
+                usdcAdded
+                  ? 'btn btn-sm btn-outline-secondary disabled'
+                  : 'btn btn-sm btn-outline-secondary'
+              }
+              onClick={handleAddUSDCToMetaMask}
+              disabled={usdcAdded}
+            >
+              {usdcAdded ? 'Added ✓' : 'Add to MetaMask'}
+            </button>
           </div>
-          <div>
+          <div className="d-flex align-items-center gap-2">
             <strong>ppUSDC:</strong> {ppBalance.toFixed(2)}
+            <button
+              type="button"
+              className={
+                ppAdded
+                  ? 'btn btn-sm btn-outline-secondary disabled'
+                  : 'btn btn-sm btn-outline-secondary'
+              }
+              onClick={handleAddPpUSDCToMetaMask}
+              disabled={ppAdded}
+            >
+              {ppAdded ? 'Added ✓' : 'Add to MetaMask'}
+            </button>
           </div>
         </div>
 

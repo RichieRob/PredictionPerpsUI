@@ -4,7 +4,6 @@
 import React, { useState } from 'react';
 import { useMarketData } from './useMarketData';
 import { PositionPill } from '../PositionPill';
-import { addTokensToMetaMask } from '../../utils/addTokenToMetaMask';
 
 type MarketTableProps = {
   id: bigint;
@@ -26,7 +25,6 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
   } = useMarketData(id);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isAddingTokens, setIsAddingTokens] = useState(false);
 
   const icon = (k: string) =>
     sortKey !== k ? '↕' : sortDir === 'asc' ? '↑' : '↓';
@@ -50,32 +48,6 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
 
   const handleManualRefresh = async () => {
     await runRefresh(false);
-  };
-
-  const handleAddAllToMetaMask = async () => {
-    setIsAddingTokens(true);
-    try {
-      const tokens = rows.map((row) => ({
-        address: row.tokenAddress as `0x${string}`,
-        symbol: row.erc20Symbol as string,
-        decimals: 6,
-      }));
-
-      const results = await addTokensToMetaMask(tokens);
-      const allSucceeded = results.every((r) => r);
-      console.log('[MarketTable] Batch add to MetaMask results:', results);
-
-      if (allSucceeded) {
-        alert('All tokens added to MetaMask successfully!');
-      } else {
-        alert('Some tokens failed to add. Check console for details.');
-      }
-    } catch (err) {
-      console.error('[MarketTable] Error adding tokens:', err);
-      alert('Failed to add tokens to MetaMask.');
-    } finally {
-      setIsAddingTokens(false);
-    }
   };
 
   // Initial load spinner
@@ -133,21 +105,6 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
             disabled={isRefreshing}
           >
             Refresh
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm btn-outline-secondary"
-            onClick={handleAddAllToMetaMask}
-            disabled={isAddingTokens || rows.length === 0}
-          >
-            {isAddingTokens && (
-              <span
-                className="spinner-border spinner-border-sm me-1"
-                role="status"
-                aria-hidden="true"
-              />
-            )}
-            Add All to MetaMask
           </button>
         </div>
       </div>

@@ -12,6 +12,7 @@ import {
 import { parseUnits, hexToSignature, type Hex } from 'viem';
 import { CONTRACTS, ABIS } from '../../config/contracts';
 import { useLedgerTx } from '../../hooks/useLedgerTx';
+import { addTokenToMetaMask } from '../../utils/addTokenToMetaMask';
 
 const ERC20_PERMIT_ABI = [
   {
@@ -20,6 +21,23 @@ const ERC20_PERMIT_ABI = [
     stateMutability: 'view',
     inputs: [{ name: 'owner', type: 'address' }],
     outputs: [{ name: '', type: 'uint256' }],
+  },
+] as const;
+
+const ERC20_SYMBOL_DECIMALS_ABI = [
+  {
+    type: 'function',
+    name: 'symbol',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }],
+  },
+  {
+    type: 'function',
+    name: 'decimals',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }],
   },
 ] as const;
 
@@ -35,13 +53,16 @@ export function useWalletPanel({ onAfterTx }: UseWalletPanelArgs) {
   const { writeContractAsync } = useWriteContract();
 
   const chainKey = 'sepolia' as const;
-  const { ledger, usdc } = CONTRACTS[chainKey];
+  const { ledger, usdc, ppUSDC } = CONTRACTS[chainKey];
 
   const depositTx = useLedgerTx({ onAfterTx });
   const withdrawTx = useLedgerTx({ onAfterTx });
 
   const [depositAmount, setDepositAmount] = useState<string>('');
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+
+  const [usdcAdded, setUsdcAdded] = useState(false);
+  const [ppAdded, setPpAdded] = useState(false);
 
   const isBusyDeposit = depositTx.status === 'pending';
   const isBusyWithdraw = withdrawTx.status === 'pending';
@@ -127,13 +148,7 @@ export function useWalletPanel({ onAfterTx }: UseWalletPanelArgs) {
             address: ledger as `0x${string}`,
             abi: ABIS.ledger,
             functionName: 'deposit',
-            args: [
-              address,
-              amount,
-              0n,
-              1,
-              eipPermit
-            ],
+            args: [address, amount, 0n, 1, eipPermit],
             gas: 5_000_000n,
           }),
         {
@@ -197,6 +212,64 @@ export function useWalletPanel({ onAfterTx }: UseWalletPanelArgs) {
     }
   };
 
+  const handleAddUSDCToMetaMask = async () => {
+    if (!publicClient) return;
+
+    try {
+      const [symbol, decimals] = await Promise.all([
+        publicClient.readContract({
+          address: usdc as `0x${string}`,
+          abi: ERC20_SYMBOL_DECIMALS_ABI,
+          functionName: 'symbol',
+        }) as Promise<string>,
+        publicClient.readContract({
+          address: usdc as `0x${string}`,
+          abi: ERC20_SYMBOL_DECIMALS_ABI,
+          functionName: 'decimals',
+        }) as Promise<number>,
+      ]);
+
+      const ok = await addTokenToMetaMask({
+        address: usdc as `0x${string}`,
+        symbol,
+        decimals,
+      });
+
+      if (ok) setUsdcAdded(true);
+    } catch (err) {
+      console.error('[useWalletPanel] Failed to add USDC to MetaMask:', err);
+    }
+  };
+
+  const handleAddPpUSDCToMetaMask = async () => {
+    if (!publicClient) return;
+
+    try {
+      const [symbol, decimals] = await Promise.all([
+        publicClient.readContract({
+          address: ppUSDC as `0x${string}`,
+          abi: ERC20_SYMBOL_DECIMALS_ABI,
+          functionName: 'symbol',
+        }) as Promise<string>,
+        publicClient.readContract({
+          address: ppUSDC as `0x${string}`,
+          abi: ERC20_SYMBOL_DECIMALS_ABI,
+          functionName: 'decimals',
+        }) as Promise<number>,
+      ]);
+
+      const ok = await addTokenToMetaMask({
+        address: ppUSDC as `0x${string}`,
+        symbol,
+        decimals,
+      });
+
+      if (ok) setPpAdded(true);
+    } catch (err) {
+      console.error('[useWalletPanel] Failed to add ppUSDC to MetaMask:', err);
+    }
+  };
+
   return {
     depositAmount,
     setDepositAmount,
@@ -210,5 +283,9 @@ export function useWalletPanel({ onAfterTx }: UseWalletPanelArgs) {
     withdrawStatus: withdrawTx.status,
     depositErrorMessage: depositTx.errorMessage,
     withdrawErrorMessage: withdrawTx.errorMessage,
+    handleAddUSDCToMetaMask,
+    handleAddPpUSDCToMetaMask,
+    usdcAdded,
+    ppAdded,
   };
 }

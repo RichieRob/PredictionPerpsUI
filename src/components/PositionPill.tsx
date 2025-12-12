@@ -13,7 +13,7 @@ type PositionPillProps = {
   tokenAddress: `0x${string}`;
   balance: number;
   price: number | null;      // Back price
-  layPrice: number | null;  // Lay price (from LMSR)
+  layPrice: number | null;   // Lay price (from LMSR)
   erc20Symbol: string;
   onAfterTx?: () => Promise<unknown> | void;
 };
@@ -43,6 +43,8 @@ export function PositionPill({
     layStatus,
     backErrorMessage,
     layErrorMessage,
+    addedBack,
+    addedLay,
   } = usePositionPill({
     marketId,
     positionId,
@@ -84,21 +86,25 @@ export function PositionPill({
   }, [balance]);
 
   const isBusyCurrent = side === 'back' ? isBusyBack : isBusyLay;
+  const isBackSide = side === 'back';
 
-  // Decide which one is prominent (top) based on current side
-  const isBackProminent = side === 'back';
+  // Add-to-MetaMask button visuals
+  const isCurrentAdded = isBackSide ? addedBack : addedLay;
+  const addBtnClass = isBackSide
+    ? isCurrentAdded
+      ? 'btn btn-sm btn-primary disabled'
+      : 'btn btn-sm btn-outline-primary'
+    : isCurrentAdded
+      ? 'btn btn-sm btn-danger disabled'
+      : 'btn btn-sm btn-outline-danger';
 
-  const topLabel = isBackProminent
-    ? `Back ${priceLabelBack}`
-    : `Lay ${priceLabelLay}`;
-
-  const bottomLabel = isBackProminent
-    ? `Lay ${priceLabelLay}`
-    : `Back ${priceLabelBack}`;
-
-  const topClass = isBackProminent
-    ? 'fw-semibold text-primary'
-    : 'fw-semibold text-danger'; // blue for back, red for lay
+  const addLabel = isBackSide
+    ? isCurrentAdded
+      ? 'Back added ✓'
+      : 'Add Back'
+    : isCurrentAdded
+      ? 'Lay added ✓'
+      : 'Add Lay';
 
   return (
     <tr>
@@ -120,16 +126,34 @@ export function PositionPill({
         </span>
       </td>
 
+      {/* Price column: Back + Lay, prominence depends on side */}
       <td className="align-middle">
         <div
-          className="text-end"
+          className="text-end mb-1"
           style={{
             transition: 'opacity 0.3s ease',
             opacity: fadePrice ? 0.5 : 1,
           }}
         >
-          <div className={topClass}>{topLabel}</div>
-          <div className="small text-muted">{bottomLabel}</div>
+          {isBackSide ? (
+            <>
+              <div className="fw-semibold text-primary">
+                Back&nbsp;{priceLabelBack}
+              </div>
+              <div className="small text-muted">
+                Lay&nbsp;{priceLabelLay}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="fw-semibold text-danger">
+                Lay&nbsp;{priceLabelLay}
+              </div>
+              <div className="small text-muted">
+                Back&nbsp;{priceLabelBack}
+              </div>
+            </>
+          )}
         </div>
       </td>
 
@@ -147,8 +171,7 @@ export function PositionPill({
           />
 
           <div className="d-flex justify-content-end align-items-center gap-2 mt-1">
-            {/* Back/Lay toggle controlling how the ppUSDC input is interpreted
-                AND which price is prominent */}
+            {/* Back/Lay toggle controlling how the ppUSDC input is interpreted */}
             <div
               className="btn-group btn-group-sm"
               role="group"
@@ -215,10 +238,11 @@ export function PositionPill({
       <td className="align-middle text-end">
         <button
           type="button"
-          className="btn btn-sm btn-outline-secondary"
+          className={addBtnClass}
           onClick={handleAddToMetaMask}
+          disabled={isCurrentAdded}
         >
-          Add
+          {addLabel}
         </button>
       </td>
     </tr>

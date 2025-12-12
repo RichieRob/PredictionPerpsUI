@@ -2,7 +2,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useAccount, useWriteContract } from 'wagmi';
+import {
+  useAccount,
+  useWriteContract,
+  usePublicClient,
+} from 'wagmi';
 import { CONTRACTS, ABIS } from '../../config/contracts';
 import { useLedgerTx } from '../../hooks/useLedgerTx';
 import { addTokenToMetaMask } from '../../utils/addTokenToMetaMask';
@@ -10,7 +14,7 @@ import { addTokenToMetaMask } from '../../utils/addTokenToMetaMask';
 type UsePositionPillArgs = {
   marketId: bigint;
   positionId: bigint;
-  tokenAddress: `0x${string}`;
+  tokenAddress: `0x${string}`; // Back token (not used for Lay add)
   erc20Symbol: string;
   ticker: string;
   onAfterTx?: () => Promise<unknown> | void;
@@ -28,6 +32,7 @@ export function usePositionPill({
 }: UsePositionPillArgs) {
   const { address } = useAccount();
   const { ledger, lmsr } = CONTRACTS.sepolia;
+  const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
   const backTx = useLedgerTx({ onAfterTx });
@@ -35,6 +40,9 @@ export function usePositionPill({
 
   const [size, setSize] = useState<string>('');
   const [side, setSide] = useState<TradeSide>('back');
+
+  const [addedBack, setAddedBack] = useState(false);
+  const [addedLay, setAddedLay] = useState(false);
 
   const isBusyBack = backTx.status === 'pending';
   const isBusyLay = layTx.status === 'pending';
@@ -103,28 +111,66 @@ export function usePositionPill({
 
   const handleAddToMetaMask = async () => {
     console.log('[usePositionPill] Add to MetaMask click', {
+      marketId: marketId.toString(),
       positionId: positionId.toString(),
-      tokenAddress,
+      side,
+      backTokenProp: tokenAddress,
       erc20Symbol,
       ticker,
     });
 
-    // For now just use the base symbol / ticker;
-    // later we can prepend B-/L- using `side`.
-    const symbolToUse = erc20Symbol || ticker || `POS${positionId.toString()}`;
-    const decimalsToUse = 6;
+    if (!publicClient) {
+      console.log('[usePositionPill] publicClient not ready; cannot read Ledger.');
+      return;
+    }
 
-    console.log('[usePositionPill] Calling addTokenToMetaMask', {
-      address: tokenAddress,
-      symbolToUse,
-      decimalsToUse,
-    });
+    const isBack = side === 'back';
 
-    await addTokenToMetaMask({
-      address: tokenAddress,
-      symbol: symbolToUse,
-      decimals: decimalsToUse,
-    });
+    try {
+      // Fetch the correct ERC20 address for the current side
+      const tokenOnChain = (await publicClient.readContract({
+        address: ledger as `0x${string}`,
+        abi: ABIS.ledger,
+        functionName: isBack
+          ? 'getBackPositionERC20'
+          : 'getLayPositionERC20',
+        args: [marketId, positionId],
+      })) as `0x${string}`;
+
+      // Fetch the exact symbol used by the clone ERC20
+      const symbolOnChain = (await publicClient.readContract({
+        address: ledger as `0x${string}`,
+        abi: ABIS.ledger,
+        functionName: 'erc20SymbolForSide',
+        args: [marketId, positionId, isBack],
+      })) as string;
+
+      console.log('[usePositionPill] Calling addTokenToMetaMask', {
+        side,
+        isBack,
+        address: tokenOnChain,
+        symbolOnChain,
+      });
+
+      const ok = await addTokenToMetaMask({
+        address: tokenOnChain,
+        symbol: symbolOnChain,
+        decimals: 6, // All mirrors use 6 decimals
+      });
+
+      if (ok) {
+        if (isBack) {
+          setAddedBack(true);
+        } else {
+          setAddedLay(true);
+        }
+      }
+    } catch (err) {
+      console.error(
+        '[usePositionPill] Failed to fetch token metadata for MetaMask add:',
+        err
+      );
+    }
   };
 
   return {
@@ -142,5 +188,7 @@ export function usePositionPill({
     layStatus: layTx.status,
     backErrorMessage: backTx.errorMessage,
     layErrorMessage: layTx.errorMessage,
+    addedBack,
+    addedLay,
   };
 }
