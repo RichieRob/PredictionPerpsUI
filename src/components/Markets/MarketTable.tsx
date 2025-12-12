@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useMarketData } from './useMarketData';
+import { useMarketData } from '../../hooks/useMarketData';
 import { PositionPill } from '../PositionPill';
 
 type MarketTableProps = {

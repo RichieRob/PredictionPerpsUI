@@ -1,11 +1,10 @@
-// src/components/Markets/useMarketData.ts
+// src/hooks/Markets/useMarketData.ts
 'use client';
 
-import { useMemo, useEffect } from 'react';
-import { useAccount, useReadContract } from 'wagmi';
-import { CONTRACTS, ABIS } from '../../config/contracts';
+import { useMemo } from 'react';
+import { usePrevious } from './usePrevious';
 import { useSortedRows } from './useSortedRows';
-import { usePrevious } from '../../hooks/usePrevious';
+import { useMarketQueries } from './useMarketQueries';
 
 export type PositionRow = {
   positionId: bigint;
@@ -35,68 +34,28 @@ type PositionInfoWithBalanceExtended = PositionInfoExtended & {
 export type { SortKey, SortDir } from './useSortedRows';
 
 export function useMarketData(id: bigint) {
-  const { ledger, ledgerViews, lmsr } = CONTRACTS.sepolia;
-  const { address } = useAccount();
+  const {
+    address,
+    marketMetaQuery,
+    positionsQuery,
+    pricesQuery,
+    layPricesQuery,
+    reserveExposureQuery,
+  } = useMarketQueries(id);
 
-  /* ---------------- Market Meta ---------------- */
   const {
     data: marketData,
     refetch: refetchMarketMeta,
     isLoading: isLoadingMarketMeta,
-  } = useReadContract({
-    address: ledger as `0x${string}`,
-    abi: ABIS.ledger,
-    functionName: 'getMarketDetails',
-    args: [id],
-  });
+  } = marketMetaQuery;
 
   const [marketName, marketTicker] = (marketData || []) as [string, string];
-
-  /* ---------------- Positions Info (via LedgerViews) ---------------- */
-  const positionsFunctionName = address
-    ? 'getMarketPositionsInfoForAccountExtended'
-    : 'getMarketPositionsInfoExtended';
-
-  const positionsArgs = address ? [id, address] : [id];
 
   const {
     data: positionsInfoRaw,
     refetch: refetchPositionsInfo,
     isLoading: isLoadingPositionsInfo,
-    isFetching: isFetchingPositionsInfo,
-    error: positionsInfoError,
-  } = useReadContract({
-    address: ledgerViews as `0x${string}`,
-    abi: ABIS.ledgerViews,
-    functionName: positionsFunctionName,
-    args: positionsArgs,
-    query: {
-      enabled: true,
-    },
-  });
-
-  console.log('[useMarketData] Positions info fetch status', {
-    marketId: id.toString(),
-    address,
-    functionName: positionsFunctionName,
-    isLoading: isLoadingPositionsInfo,
-    isFetching: isFetchingPositionsInfo,
-    error: positionsInfoError?.message,
-  });
-
-  useEffect(() => {
-    if (positionsInfoRaw) {
-      console.log('[useMarketData] Positions info data updated', {
-        marketId: id.toString(),
-        numEntries: (positionsInfoRaw as any[]).length,
-        sample: (positionsInfoRaw as any[]).slice(0, 4),
-      });
-    } else {
-      console.log('[useMarketData] Positions info data is undefined/null', {
-        marketId: id.toString(),
-      });
-    }
-  }, [positionsInfoRaw, id]);
+  } = positionsQuery;
 
   const rawInfos =
     (positionsInfoRaw as
@@ -104,7 +63,7 @@ export function useMarketData(id: bigint) {
       | PositionInfoWithBalanceExtended[]
       | undefined) || [];
 
-  /* ---------------- Collapse Back + Lay into logical positions ---------------- */
+  // Collapse Back + Lay into logical positions
   const logicalPositions = useMemo(() => {
     type Logical = {
       positionId: bigint;
@@ -113,7 +72,6 @@ export function useMarketData(id: bigint) {
       erc20Symbol: string;
       backToken?: `0x${string}`;
       backBalance?: bigint;
-      // layToken / layBalance could be added later
     };
 
     const map = new Map<bigint, Logical>();
@@ -137,12 +95,9 @@ export function useMarketData(id: bigint) {
         if ('balance' in info) {
           entry.backBalance = info.balance ?? 0n;
         }
-      } else {
-        // Lay side – ignored for now (no separate lay token in this table)
       }
     }
 
-    // Only keep entries that actually have a Back token listed
     return Array.from(map.values()).filter((e) => !!e.backToken);
   }, [rawInfos]);
 
@@ -150,42 +105,23 @@ export function useMarketData(id: bigint) {
   const havePositions =
     positionsInfoRaw !== undefined && logicalPositions.length > 0;
 
-  /* ---------------- Prices (Back + Lay, via LMSR) ---------------- */
-
-  // BACK prices + reserve (Other) price
+  // Prices (Back + Lay)
   const {
     data: pricesRaw,
     refetch: refetchMarketPrices,
     isLoading: isLoadingPrices,
-  } = useReadContract({
-    address: lmsr as `0x${string}`,
-    abi: ABIS.lmsr,
-    functionName: 'getAllBackPricesWad',
-    args: [id],
-    query: {
-      enabled: positions.length > 0,
-    },
-  });
+  } = pricesQuery;
+
+  const {
+    data: layPricesRaw,
+    refetch: refetchLayPrices,
+    isLoading: isLoadingLayPrices,
+  } = layPricesQuery;
 
   const [allPrices, reservePriceWad] = (pricesRaw || [[], 0n]) as [
     { positionId: bigint; priceWad: bigint }[],
     bigint
   ];
-
-  // LAY prices
-  const {
-    data: layPricesRaw,
-    refetch: refetchLayPrices,
-    isLoading: isLoadingLayPrices,
-  } = useReadContract({
-    address: lmsr as `0x${string}`,
-    abi: ABIS.lmsr,
-    functionName: 'getAllLayPricesWad',
-    args: [id],
-    query: {
-      enabled: positions.length > 0,
-    },
-  });
 
   const positionPrices: (number | null)[] = useMemo(() => {
     if (positions.length === 0) return [];
@@ -225,40 +161,12 @@ export function useMarketData(id: bigint) {
   const reserveN = Number(reservePriceWad) / 1e18;
   if (Number.isFinite(reserveN)) reservePrice = reserveN;
 
-  /* ---------------- OTHER exposure (getReserveExposure) ---------------- */
+  // OTHER exposure
   const {
     data: reserveExposureRaw,
     refetch: refetchReserveExposure,
     isLoading: isLoadingReserveExposure,
-  } = useReadContract({
-    address: ledger as `0x${string}`,
-    abi: ABIS.ledger,
-    functionName: 'getReserveExposure',
-    // Only call if we have an account
-    args: address ? [address, id] : undefined,
-    query: {
-      enabled: !!address,
-    },
-  });
-
-  useEffect(() => {
-    if (!address) {
-      console.log(
-        '[useMarketData] getReserveExposure skipped: no account',
-        { marketId: id.toString() }
-      );
-      return;
-    }
-
-    console.log(
-      '[useMarketData] getReserveExposure returned:',
-      reserveExposureRaw,
-      'for marketId =',
-      id.toString(),
-      'account =',
-      address
-    );
-  }, [reserveExposureRaw, address, id]);
+  } = reserveExposureQuery;
 
   const otherExposureRaw = reserveExposureRaw as bigint | undefined;
 
@@ -272,26 +180,18 @@ export function useMarketData(id: bigint) {
   const reserveExposure =
     otherExposureRaw !== undefined ? otherExposure : previousOtherExposure;
 
-  /* ---------------- All-or-nothing readiness ---------------- */
+  // All-or-nothing readiness
   const havePrices =
     positions.length === 0 || (!!pricesRaw && !!layPricesRaw);
   const fullyReady = havePositions && havePrices && !!positionsInfoRaw;
 
-  /* ---------------- Rows (one per logical position) ---------------- */
+  // Rows (one per logical position)
   const rows: PositionRow[] = useMemo(() => {
     if (!fullyReady) return [];
 
     return logicalPositions.map((entry, idx) => {
       const balanceRaw = entry.backBalance ?? 0n;
       const balance = Number(balanceRaw) / 1e6;
-
-      console.log('[useMarketData] Row computed', {
-        marketId: id.toString(),
-        positionId: entry.positionId.toString(),
-        backToken: entry.backToken,
-        rawBalance: balanceRaw.toString(),
-        balance,
-      });
 
       return {
         positionId: entry.positionId,
@@ -304,22 +204,21 @@ export function useMarketData(id: bigint) {
         layPrice: layPrices[idx],
       };
     });
-  }, [fullyReady, logicalPositions, positionPrices, layPrices, id]);
+  }, [fullyReady, logicalPositions, positionPrices, layPrices]);
 
   const previousRows = usePrevious(rows) || [];
   const displayRows = fullyReady ? rows : previousRows;
 
-  /* ---------------- Sorting ---------------- */
+  // Sorting
   const { sortedRows, sort, sortKey, sortDir } = useSortedRows(displayRows);
 
-  /* ---------------- Refetch all ---------------- */
+  // Refetch all
   const refetchAll = async () => {
     await Promise.allSettled([
       refetchMarketMeta?.(),
       refetchPositionsInfo?.(),
       refetchMarketPrices?.(),
       refetchLayPrices?.(),
-      // include reserve exposure in the "transaction refresh"
       address ? refetchReserveExposure?.() : undefined,
     ]);
   };
