@@ -17,6 +17,7 @@ type UsePositionPillArgs = {
   tokenAddress: `0x${string}`; // Back token (not used for Lay add)
   erc20Symbol: string;
   ticker: string;
+  backBalance: number;          // 👈 NEW: current Back exposure (tokens)
   onAfterTx?: () => Promise<unknown> | void;
 };
 
@@ -28,6 +29,7 @@ export function usePositionPill({
   tokenAddress,
   erc20Symbol,
   ticker,
+  backBalance,
   onAfterTx,
 }: UsePositionPillArgs) {
   const { address } = useAccount();
@@ -37,6 +39,7 @@ export function usePositionPill({
 
   const backTx = useLedgerTx({ onAfterTx });
   const layTx = useLedgerTx({ onAfterTx });
+  const liqTx = useLedgerTx({ onAfterTx }); // 👈 NEW: liquidation tx
 
   const [size, setSize] = useState<string>('');
   const [side, setSide] = useState<TradeSide>('back');
@@ -46,6 +49,7 @@ export function usePositionPill({
 
   const isBusyBack = backTx.status === 'pending';
   const isBusyLay = layTx.status === 'pending';
+  const isBusyLiquidate = liqTx.status === 'pending'; // 👈
 
   const executeTrade = async (isBack: boolean) => {
     const txHook = isBack ? backTx : layTx;
@@ -107,6 +111,52 @@ export function usePositionPill({
 
   const handleTrade = async () => {
     await executeTrade(side === 'back');
+  };
+
+  // 👇 NEW: liquidation handler – buy Lay tokens equal to Back exposure
+  const handleLiquidate = async () => {
+    if (!address) {
+      liqTx.setErrorMessage('Wallet not connected.');
+      return;
+    }
+
+    const exposure = Number(backBalance);
+    if (!Number.isFinite(exposure) || exposure <= 0) {
+      liqTx.setErrorMessage('No Back exposure to liquidate.');
+      return;
+    }
+
+    const TOK_DECIMALS = 6;
+    const t = BigInt(Math.round(exposure * 10 ** TOK_DECIMALS));
+
+    // Very loose maxUSDCIn – this is a “just close me” button.
+    const MAX_UINT256 = (1n << 256n) - 1n;
+
+    await liqTx.runTx(async () => {
+      console.log('[usePositionPill] liquidation tx', {
+        marketId: marketId.toString(),
+        positionId: positionId.toString(),
+        backExposureTokens: exposure,
+        t: t.toString(),
+      });
+
+      const hash = await writeContractAsync({
+        address: ledger as `0x${string}`,
+        abi: ABIS.ledger,
+        functionName: 'buyExactTokens',
+        args: [
+          lmsr as `0x${string}`,
+          marketId,
+          positionId,
+          false,      // isBack = false => buy LAY
+          t,          // number of Lay tokens = Back exposure
+          MAX_UINT256 // maxUSDCIn (essentially "no slippage cap")
+        ],
+      });
+
+      console.log('[usePositionPill] liquidation tx sent, hash:', hash);
+      return hash;
+    });
   };
 
   const handleAddToMetaMask = async () => {
@@ -180,14 +230,18 @@ export function usePositionPill({
     setSide,
     isBusyBack,
     isBusyLay,
+    isBusyLiquidate,     // 👈
     handleBack,
     handleLay,
     handleTrade,
+    handleLiquidate,     // 👈
     handleAddToMetaMask,
     backStatus: backTx.status,
     layStatus: layTx.status,
+    liqStatus: liqTx.status,                 // 👈
     backErrorMessage: backTx.errorMessage,
     layErrorMessage: layTx.errorMessage,
+    liqErrorMessage: liqTx.errorMessage,     // 👈
     addedBack,
     addedLay,
   };

@@ -3,6 +3,8 @@
 
 import { TxStatusBanner } from './TxStatusBanner';
 import { useWalletPanel } from '../hooks/WalletPanel/useWalletPanel';
+import { fmt } from '../utils/formatNumber';
+
 
 type WalletPanelProps = {
   usdcBalance: number;
@@ -38,7 +40,7 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
       <div className="border rounded p-3">
         <div className="d-flex flex-column flex-md-row justify-content-between mb-3 gap-2">
           <div className="mb-2 mb-md-0 d-flex align-items-center gap-2">
-            <strong>USDC:</strong> {usdcBalance.toFixed(2)}
+            <strong>USDC:</strong> ${fmt(usdcBalance, 0)}
             <button
               type="button"
               className={
@@ -53,7 +55,7 @@ export function WalletPanel({ usdcBalance, ppBalance, onAfterTx }: WalletPanelPr
             </button>
           </div>
           <div className="d-flex align-items-center gap-2">
-            <strong>ppUSDC:</strong> {ppBalance.toFixed(2)}
+            <strong>ppUSDC:</strong> ${fmt(ppBalance,0)}
             <button
               type="button"
               className={

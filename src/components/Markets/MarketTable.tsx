@@ -10,6 +10,26 @@ type MarketTableProps = {
   onAfterTx?: () => Promise<unknown> | void;
 };
 
+// Shared exposure formatter (0dp, green for +, red for 0 / -)
+function formatExposure(value: number) {
+  if (!Number.isFinite(value)) {
+    return { label: '$0', className: 'text-danger' };
+  }
+  if (value > 0) {
+    return {
+      label: `+$${value.toFixed(0)}`,
+      className: 'text-success',
+    };
+  }
+  if (value < 0) {
+    return {
+      label: `-$${Math.abs(value).toFixed(0)}`,
+      className: 'text-danger',
+    };
+  }
+  return { label: '$0', className: 'text-danger' };
+}
+
 export function MarketTable({ id, onAfterTx }: MarketTableProps) {
   const {
     marketName,
@@ -50,7 +70,32 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
     await runRefresh(false);
   };
 
-  // Initial load spinner
+  // ─────────────────────────────────────────────
+  // Derived values (NO hooks below this point)
+  // ─────────────────────────────────────────────
+
+  const hasReservePrice = typeof reservePrice === 'number';
+
+  // Lay(OTHER) = 1 - price(OTHER)
+  const otherLayPrice =
+    hasReservePrice && reservePrice != null
+      ? Math.max(0, Math.min(1, 1 - reservePrice))
+      : null;
+
+  const otherBackLabel =
+    hasReservePrice && reservePrice != null
+      ? `$${reservePrice.toFixed(4)}`
+      : '—';
+
+  const otherLayLabel =
+    otherLayPrice != null ? `$${otherLayPrice.toFixed(4)}` : '—';
+
+  const otherExposureFmt = useMemo(
+    () => formatExposure(reserveExposure),
+    [reserveExposure],
+  );
+
+  // Early return AFTER all hooks are declared
   if (isLoading) {
     return (
       <div className="text-center py-3">
@@ -66,56 +111,19 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
     );
   }
 
-  const hasReservePrice = typeof reservePrice === 'number';
-
-  // Lay(OTHER) = 1 - price(OTHER)
-  const otherLayPrice =
-    hasReservePrice && reservePrice != null
-      ? Math.max(0, Math.min(1, 1 - reservePrice))
-      : null;
-  const otherBackLabel =
-    hasReservePrice && reservePrice != null
-      ? `$${reservePrice.toFixed(4)}`
-      : '—';
-  const otherLayLabel =
-    otherLayPrice != null ? `$${otherLayPrice.toFixed(4)}` : '—';
-
-  // Shared exposure formatter (0dp)
-  const formatExposure = (value: number) => {
-    if (!Number.isFinite(value)) {
-      return { label: '$0', className: 'text-danger' };
-    }
-    if (value > 0) {
-      return {
-        label: `+$${value.toFixed(0)}`,
-        className: 'text-success',
-      };
-    }
-    if (value < 0) {
-      return {
-        label: `-$${Math.abs(value).toFixed(0)}`,
-        className: 'text-danger',
-      };
-    }
-    return { label: '$0', className: 'text-danger' };
-  };
-
-  const otherExposureFmt = useMemo(
-    () => formatExposure(reserveExposure),
-    [reserveExposure],
-  );
-
   return (
     <div className="list-group-item mb-3">
+      {/* Header / title row */}
       <div className="d-flex justify-content-between align-items-center mb-2">
         <div>
-          <div>{marketName || `Market #${id.toString()}`}</div>
-          <small className="text-muted">{marketTicker}</small>
+          <div className="fw-semibold">
+            {marketName || `Market #${id.toString()}`}
+          </div>
+          {marketTicker && (
+            <small className="text-muted">{marketTicker}</small>
+          )}
         </div>
         <div className="d-flex align-items-center gap-2">
-          <small className="text-muted me-2">
-            Market ID: {id.toString()}
-          </small>
           {isRefreshing && (
             <span
               className="spinner-border spinner-border-sm text-secondary"
@@ -135,46 +143,45 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
       </div>
 
       <div className="table-responsive mb-2">
-      <table className="table table-sm align-middle mb-0">
-
+        <table className="table table-sm align-middle mb-0">
           <thead>
             <tr>
-              {/* Position column – moderate width */}
-              <th>
-  <button
-    type="button"
-    className="btn btn-link p-0 text-decoration-none"
-    onClick={() => sort('name')}
-  >
-    Position {icon('name')}
-  </button>
-</th>
-
-<th className="text-end">
-  <button
-    type="button"
-    className="btn btn-link p-0 text-decoration-none"
-    onClick={() => sort('balance')}
-  >
-    Exposure {icon('balance')}
-  </button>
-</th>
-
-<th className="text-end">
-  <button
-    type="button"
-    className="btn btn-link p-0 text-decoration-none"
-    onClick={() => sort('price')}
-  >
-    Price {icon('price')}
-  </button>
-</th>
-
-<th className="text-end">Trade</th>
-<th className="text-end">Token</th>
-
+              <th className="w-25">
+                <button
+                  type="button"
+                  className="btn btn-link p-0 text-decoration-none"
+                  onClick={() => sort('name')}
+                >
+                  Position {icon('name')}
+                </button>
+              </th>
+              <th className="text-end" style={{ width: '12rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-link p-0 text-decoration-none"
+                  onClick={() => sort('balance')}
+                >
+                  Exposure {icon('balance')}
+                </button>
+              </th>
+              <th className="text-end" style={{ width: '14rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-link p-0 text-decoration-none"
+                  onClick={() => sort('price')}
+                >
+                  Price {icon('price')}
+                </button>
+              </th>
+              <th className="text-end" style={{ width: '10rem' }}>
+                Trade
+              </th>
+              <th className="text-end" style={{ width: '9rem' }}>
+                Token
+              </th>
             </tr>
           </thead>
+
           <tbody>
             {rows.map((row) => (
               <PositionPill
@@ -196,7 +203,10 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
               <tr>
                 {/* Name / label */}
                 <td>
-                  <div className="text-truncate" title="OTHER – Unlisted outcomes">
+                  <div
+                    className="text-truncate"
+                    title="OTHER – Unlisted outcomes"
+                  >
                     <span className="fw-semibold">OTHER</span>{' '}
                     <span className="text-muted">Unlisted outcomes</span>
                   </div>

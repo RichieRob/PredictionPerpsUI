@@ -7,6 +7,7 @@ import { CONTRACTS, ABIS } from '../config/contracts';
 import { DevInfo } from '../components/DevInfo';
 import { Markets } from '../components/Markets/Markets';
 import { WalletPanel } from '../components/WalletPanel';
+import { MockUsdcPanel } from '../components/MockUsdcPanel';
 
 const ERC20_ABI = [
   {
@@ -90,13 +91,18 @@ export default function HomePage() {
         <ConnectButton />
       </header>
 
-      {address && (
-        <WalletPanel
-          usdcBalance={usdcBalance}
-          ppBalance={ppBalance}
-          onAfterTx={handleAfterTx}
-        />
-      )}
+{address && (
+  <>
+    <MockUsdcPanel onAfterMint={refetchUsdc} />
+
+    <WalletPanel
+      usdcBalance={usdcBalance}
+      ppBalance={ppBalance}
+      onAfterTx={handleAfterTx}
+    />
+  </>
+)}
+
 
       {marketsLoading ? (
         <div className="mt-4 text-center">

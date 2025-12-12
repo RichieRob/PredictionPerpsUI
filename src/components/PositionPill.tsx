@@ -4,6 +4,8 @@
 import React, { useState, useEffect } from 'react';
 import { TxStatusBanner } from './TxStatusBanner';
 import { usePositionPill } from '../hooks/PositionPill/usePositionPill';
+import { fmt } from '../utils/formatNumber';
+
 
 type PositionPillProps = {
   marketId: bigint;
@@ -37,18 +39,23 @@ export function PositionPill({
     setSide,
     isBusyBack,
     isBusyLay,
+    isBusyLiquidate,
     handleTrade,
+    handleLiquidate,
     handleAddToMetaMask,
     backStatus,
     layStatus,
+    liqStatus,
     backErrorMessage,
     layErrorMessage,
+    liqErrorMessage,
   } = usePositionPill({
     marketId,
     positionId,
     tokenAddress,
     erc20Symbol,
     ticker,
+    backBalance: balance,  // 👈 pass Back exposure in tokens
     onAfterTx,
   });
 
@@ -94,19 +101,38 @@ export function PositionPill({
         </div>
       </td>
 
-      {/* Exposure */}
+      {/* Exposure + Liquidate button */}
       <td className="text-end align-middle">
-        <span
+        <div
           style={{
             transition: 'opacity 0.3s ease',
             opacity: fadeBalance ? 0.5 : 1,
             color: balance > 0 ? '#198754' : '#dc3545', // green / red
           }}
         >
-          {balance > 0
-            ? `+$${balance.toFixed(0)}`
-            : '$0'}
-        </span>
+{balance > 0 
+  ? `+$${fmt(balance)}`
+  : '$0'}
+
+        </div>
+
+        {balance > 0 && (
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary mt-1"
+            onClick={handleLiquidate}
+            disabled={isBusyLiquidate}
+          >
+            {isBusyLiquidate && (
+              <span
+                className="spinner-border spinner-border-sm me-1"
+                role="status"
+                aria-hidden="true"
+              />
+            )}
+            Liquidate
+          </button>
+        )}
       </td>
 
       {/* Price: Back / Lay, prominent side on top */}
@@ -152,6 +178,11 @@ export function PositionPill({
             status={layStatus}
             errorMessage={layErrorMessage}
             successMessage="✅ Trade succeeded. Balances refreshed."
+          />
+          <TxStatusBanner               // 👈 liquidation banner
+            status={liqStatus}
+            errorMessage={liqErrorMessage}
+            successMessage="✅ Liquidation succeeded. Balances refreshed."
           />
 
           <div className="d-flex justify-content-end align-items-center gap-2 mt-1">
