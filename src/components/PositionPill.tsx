@@ -1,4 +1,4 @@
-// src/components/PositionPill/PositionPill.tsx
+// src/components/PositionPill.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -13,7 +13,7 @@ type PositionPillProps = {
   tokenAddress: `0x${string}`;
   balance: number;
   price: number | null;      // Back price
-  layPrice: number | null;   // Lay price (from LMSR)
+  layPrice: number | null;   // Lay price
   erc20Symbol: string;
   onAfterTx?: () => Promise<unknown> | void;
 };
@@ -43,8 +43,6 @@ export function PositionPill({
     layStatus,
     backErrorMessage,
     layErrorMessage,
-    addedBack,
-    addedLay,
   } = usePositionPill({
     marketId,
     positionId,
@@ -54,8 +52,9 @@ export function PositionPill({
     onAfterTx,
   });
 
-  // Back / Lay clamped to [0,1]
-  const clampedBack = price != null ? Math.max(0, Math.min(price, 1)) : null;
+  // Clamp prices
+  const clampedBack =
+    price != null ? Math.max(0, Math.min(price, 1)) : null;
   const clampedLay =
     layPrice != null ? Math.max(0, Math.min(layPrice, 1)) : null;
 
@@ -71,7 +70,6 @@ export function PositionPill({
   const [fadeBalance, setFadeBalance] = useState(false);
 
   useEffect(() => {
-    // Fade whenever either price moves
     if (price !== null || layPrice !== null) {
       setFadePrice(true);
       const timer = setTimeout(() => setFadePrice(false), 300);
@@ -86,56 +84,41 @@ export function PositionPill({
   }, [balance]);
 
   const isBusyCurrent = side === 'back' ? isBusyBack : isBusyLay;
-  const isBackSide = side === 'back';
-
-  // Add-to-MetaMask button visuals
-  const isCurrentAdded = isBackSide ? addedBack : addedLay;
-  const addBtnClass = isBackSide
-    ? isCurrentAdded
-      ? 'btn btn-sm btn-primary disabled'
-      : 'btn btn-sm btn-outline-primary'
-    : isCurrentAdded
-      ? 'btn btn-sm btn-danger disabled'
-      : 'btn btn-sm btn-outline-danger';
-
-  const addLabel = isBackSide
-    ? isCurrentAdded
-      ? 'Back added ✓'
-      : 'Add Back'
-    : isCurrentAdded
-      ? 'Lay added ✓'
-      : 'Add Lay';
 
   return (
     <tr>
+      {/* Position name only */}
       <td>
         <div>
-          <strong>{ticker || positionId.toString()}</strong>{' '}
-          <span className="text-muted">{name}</span>
+          <strong>{name || ticker || positionId.toString()}</strong>
         </div>
       </td>
 
+      {/* Exposure */}
       <td className="text-end align-middle">
         <span
           style={{
             transition: 'opacity 0.3s ease',
             opacity: fadeBalance ? 0.5 : 1,
+            color: balance > 0 ? '#198754' : '#dc3545', // green / red
           }}
         >
-          {balanceLabel}
+          {balance > 0
+            ? `+$${balance.toFixed(0)}`
+            : '$0'}
         </span>
       </td>
 
-      {/* Price column: Back + Lay, prominence depends on side */}
+      {/* Price: Back / Lay, prominent side on top */}
       <td className="align-middle">
         <div
-          className="text-end mb-1"
+          className="text-end"
           style={{
             transition: 'opacity 0.3s ease',
             opacity: fadePrice ? 0.5 : 1,
           }}
         >
-          {isBackSide ? (
+          {side === 'back' ? (
             <>
               <div className="fw-semibold text-primary">
                 Back&nbsp;{priceLabelBack}
@@ -157,6 +140,7 @@ export function PositionPill({
         </div>
       </td>
 
+      {/* Trade */}
       <td className="align-middle text-end">
         <div>
           <TxStatusBanner
@@ -171,7 +155,7 @@ export function PositionPill({
           />
 
           <div className="d-flex justify-content-end align-items-center gap-2 mt-1">
-            {/* Back/Lay toggle controlling how the ppUSDC input is interpreted */}
+            {/* Back/Lay toggle */}
             <div
               className="btn-group btn-group-sm"
               role="group"
@@ -208,7 +192,7 @@ export function PositionPill({
               value={size}
               onChange={(e) => setSize(e.target.value)}
               className="form-control form-control-sm"
-              style={{ width: '100px' }}
+              style={{ width: '90px' }}
               placeholder="ppUSDC"
             />
 
@@ -235,14 +219,18 @@ export function PositionPill({
         </div>
       </td>
 
+      {/* Token button (Add Back / Add Lay handled in the hook) */}
       <td className="align-middle text-end">
         <button
           type="button"
-          className={addBtnClass}
+          className={
+            side === 'back'
+              ? 'btn btn-sm btn-outline-primary'
+              : 'btn btn-sm btn-outline-danger'
+          }
           onClick={handleAddToMetaMask}
-          disabled={isCurrentAdded}
         >
-          {addLabel}
+          {side === 'back' ? 'Add Back' : 'Add Lay'}
         </button>
       </td>
     </tr>

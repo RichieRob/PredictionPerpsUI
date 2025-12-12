@@ -1,7 +1,7 @@
 // src/components/Markets/MarketTable.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useMarketData } from './useMarketData';
 import { PositionPill } from '../PositionPill';
 
@@ -80,6 +80,31 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
   const otherLayLabel =
     otherLayPrice != null ? `$${otherLayPrice.toFixed(4)}` : '—';
 
+  // Shared exposure formatter (0dp)
+  const formatExposure = (value: number) => {
+    if (!Number.isFinite(value)) {
+      return { label: '$0', className: 'text-danger' };
+    }
+    if (value > 0) {
+      return {
+        label: `+$${value.toFixed(0)}`,
+        className: 'text-success',
+      };
+    }
+    if (value < 0) {
+      return {
+        label: `-$${Math.abs(value).toFixed(0)}`,
+        className: 'text-danger',
+      };
+    }
+    return { label: '$0', className: 'text-danger' };
+  };
+
+  const otherExposureFmt = useMemo(
+    () => formatExposure(reserveExposure),
+    [reserveExposure],
+  );
+
   return (
     <div className="list-group-item mb-3">
       <div className="d-flex justify-content-between align-items-center mb-2">
@@ -110,38 +135,44 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
       </div>
 
       <div className="table-responsive mb-2">
-        <table className="table table-sm align-middle mb-0">
+      <table className="table table-sm align-middle mb-0">
+
           <thead>
             <tr>
+              {/* Position column – moderate width */}
               <th>
-                <button
-                  type="button"
-                  className="btn btn-link p-0 text-decoration-none"
-                  onClick={() => sort('name')}
-                >
-                  Position {icon('name')}
-                </button>
-              </th>
-              <th className="text-end">
-                <button
-                  type="button"
-                  className="btn btn-link p-0 text-decoration-none"
-                  onClick={() => sort('balance')}
-                >
-                  Exposure {icon('balance')}
-                </button>
-              </th>
-              <th className="text-end">
-                <button
-                  type="button"
-                  className="btn btn-link p-0 text-decoration-none"
-                  onClick={() => sort('price')}
-                >
-                  Price {icon('price')}
-                </button>
-              </th>
-              <th className="text-end">Trade</th>
-              <th className="text-end">Token</th>
+  <button
+    type="button"
+    className="btn btn-link p-0 text-decoration-none"
+    onClick={() => sort('name')}
+  >
+    Position {icon('name')}
+  </button>
+</th>
+
+<th className="text-end">
+  <button
+    type="button"
+    className="btn btn-link p-0 text-decoration-none"
+    onClick={() => sort('balance')}
+  >
+    Exposure {icon('balance')}
+  </button>
+</th>
+
+<th className="text-end">
+  <button
+    type="button"
+    className="btn btn-link p-0 text-decoration-none"
+    onClick={() => sort('price')}
+  >
+    Price {icon('price')}
+  </button>
+</th>
+
+<th className="text-end">Trade</th>
+<th className="text-end">Token</th>
+
             </tr>
           </thead>
           <tbody>
@@ -165,15 +196,17 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
               <tr>
                 {/* Name / label */}
                 <td>
-                  <div>
-                    <strong>OTHER</strong>{' '}
+                  <div className="text-truncate" title="OTHER – Unlisted outcomes">
+                    <span className="fw-semibold">OTHER</span>{' '}
                     <span className="text-muted">Unlisted outcomes</span>
                   </div>
                 </td>
 
-                {/* Balance (use same precision as normal rows) */}
+                {/* Exposure formatted like +$25 or $0 (0dp) */}
                 <td className="text-end align-middle">
-                  {reserveExposure.toFixed(0)}
+                  <span className={otherExposureFmt.className}>
+                    {otherExposureFmt.label}
+                  </span>
                 </td>
 
                 {/* Price column: Back + Lay text, Back prominent */}
@@ -188,10 +221,8 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
                   </div>
                 </td>
 
-                {/* Empty Trade column */}
+                {/* Empty Trade / Token cells */}
                 <td className="align-middle text-end">—</td>
-
-                {/* Empty Token column */}
                 <td className="align-middle text-end">—</td>
               </tr>
             )}
