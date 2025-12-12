@@ -7,7 +7,7 @@ import type {
   PositionRow,
   SortKey,
   SortDir,
-} from '../../hooks/useMarketData';
+} from '../../hooks/Markets/useMarketData';
 
 type MarketTableViewProps = {
   id: bigint;
@@ -93,7 +93,13 @@ export function MarketTableView({
                 </button>
               </th>
               <th className="text-end" style={{ width: '12rem' }}>
-                Lay Exposure
+                <button
+                  type="button"
+                  className="btn btn-link p-0 text-decoration-none"
+                  onClick={() => sort('layBalance')}
+                >
+                  Lay Exposure {icon('layBalance')}
+                </button>
               </th>
               <th className="text-end" style={{ width: '14rem' }}>
                 <button

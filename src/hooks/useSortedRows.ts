@@ -1,10 +1,10 @@
-// src/components/Markets/useSortedRows.tsx
+// src/hooks/Markets/useSortedRows.tsx
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
 import type { PositionRow } from './useMarketData';
 
-export type SortKey = 'name' | 'balance' | 'price';
+export type SortKey = 'name' | 'balance' | 'layBalance' | 'price';
 export type SortDir = 'asc' | 'desc';
 
 function sortRows(
@@ -24,6 +24,9 @@ function sortRows(
     } else if (key === 'balance') {
       av = a.balance;
       bv = b.balance;
+    } else if (key === 'layBalance') {
+      av = a.layBalance;
+      bv = b.layBalance;
     } else {
       // price
       av = a.price ?? -1;

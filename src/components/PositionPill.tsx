@@ -4,7 +4,6 @@
 import React, { useState, useEffect } from 'react';
 import { TxStatusBanner } from './TxStatusBanner';
 import { usePositionPill } from '../hooks/PositionPill/usePositionPill';
-import { fmt } from '../utils/formatNumber';
 import { ExposureCell } from './Markets/ExposureCell';
 
 type PositionPillProps = {
@@ -44,6 +43,7 @@ export function PositionPill({
     isBusyLiquidate,
     handleTrade,
     handleLiquidate,
+    handleLiquidateLay,
     handleAddToMetaMask,
     backStatus,
     layStatus,
@@ -57,7 +57,8 @@ export function PositionPill({
     tokenAddress,
     erc20Symbol,
     ticker,
-    backBalance: balance, // Back exposure in tokens for liquidation
+    backBalance: balance,
+    layBalance,
     onAfterTx,
   });
 
@@ -126,12 +127,12 @@ export function PositionPill({
                 aria-hidden="true"
               />
             )}
-            Liquidate
+            Liquidate Back
           </button>
         )}
       </td>
 
-      {/* Lay Exposure */}
+      {/* Lay Exposure + Lay Liquidate button */}
       <td className="text-end align-middle">
         <div
           style={{
@@ -141,6 +142,24 @@ export function PositionPill({
         >
           <ExposureCell amount={layBalance} variant="lay" />
         </div>
+
+        {layBalance > 0 && (
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-danger mt-1"
+            onClick={handleLiquidateLay}
+            disabled={isBusyLiquidate}
+          >
+            {isBusyLiquidate && (
+              <span
+                className="spinner-border spinner-border-sm me-1"
+                role="status"
+                aria-hidden="true"
+              />
+            )}
+            Liquidate Lay
+          </button>
+        )}
       </td>
 
       {/* Price: Back / Lay, prominent side on top */}

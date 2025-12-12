@@ -16,10 +16,10 @@ export function ExposureCell({ amount, variant }: ExposureCellProps) {
   const formatted = fmt(amount, 0);
 
   if (variant === 'back') {
-    // Back exposure is *positive* (good): green +X
+    // Back exposure = you're long → green, +X
     return <span className="text-success">+${formatted}</span>;
   }
 
-  // Lay exposure is *liability* (bad): red -X
-  return <span className="text-danger">-${formatted}</span>;
+  // Lay exposure = liability → red, but no minus sign
+  return <span className="text-danger">${formatted}</span>;
 }
