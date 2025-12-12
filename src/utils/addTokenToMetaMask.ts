@@ -3,28 +3,46 @@
 
 type AddTokenArgs = {
   address: `0x${string}`;
-  symbol: string;      // MUST match ERC20.symbol() exactly
-  decimals: number;    // MUST match ERC20.decimals() exactly
+  symbol: string;   // SHOULD match ERC20.symbol()
+  decimals: number; // SHOULD match ERC20.decimals()
 };
+
+function getEthereumProvider(): any | null {
+  if (typeof window === 'undefined') {
+    console.log('[addTokenToMetaMask] window undefined (SSR)');
+    return null;
+  }
+
+  const eth = (window as any).ethereum;
+  if (!eth?.request) {
+    console.log('[addTokenToMetaMask] No ethereum provider on window.');
+    return null;
+  }
+
+  return eth;
+}
+
+function normaliseError(err: unknown): string {
+  const e = err as any;
+  const msg =
+    e?.message ||
+    e?.code ||
+    (e && Object.keys(e).length > 0
+      ? JSON.stringify(e)
+      : 'Unknown / empty error (likely user cancelled)');
+  return String(msg);
+}
 
 export async function addTokenToMetaMask({
   address,
   symbol,
   decimals,
 }: AddTokenArgs): Promise<boolean> {
-  if (typeof window === 'undefined') {
-    console.log('[addTokenToMetaMask] window undefined (SSR)');
-    return false;
-  }
-
-  const ethereum = (window as any).ethereum;
-  if (!ethereum?.request) {
-    console.log('[addTokenToMetaMask] No ethereum provider on window.');
-    return false;
-  }
+  const ethereum = getEthereumProvider();
+  if (!ethereum) return false;
 
   try {
-    console.log('[addTokenToMetaMask] Requesting watchAsset:', {
+    console.log('[addTokenToMetaMask] Requesting wallet_watchAsset:', {
       address,
       symbol,
       decimals,
@@ -51,31 +69,21 @@ export async function addTokenToMetaMask({
     }
 
     return !!wasAdded;
-  } catch (err: any) {
-    const msg =
-      err?.message ||
-      err?.code ||
-      (Object.keys(err || {}).length === 0
-        ? 'Unknown / empty error (likely user cancelled)'
-        : JSON.stringify(err));
+  } catch (err) {
+    const msg = normaliseError(err);
 
+    // -32601 is "method not found" on some wallets
     console.log('[addTokenToMetaMask] wallet_watchAsset error:', msg);
     return false;
   }
 }
 
-// NEW: Batch version (concurrent requests for unified prompt)
-export async function addTokensToMetaMask(tokens: AddTokenArgs[]): Promise<boolean[]> {
-  if (typeof window === 'undefined') {
-    console.log('[addTokensToMetaMask] window undefined (SSR)');
-    return tokens.map(() => false);
-  }
-
-  const ethereum = (window as any).ethereum;
-  if (!ethereum?.request) {
-    console.log('[addTokensToMetaMask] No ethereum provider on window.');
-    return tokens.map(() => false);
-  }
+// Batch version (concurrent requests)
+export async function addTokensToMetaMask(
+  tokens: AddTokenArgs[],
+): Promise<boolean[]> {
+  const ethereum = getEthereumProvider();
+  if (!ethereum) return tokens.map(() => false);
 
   if (tokens.length === 0) {
     console.log('[addTokensToMetaMask] No tokens provided.');
@@ -83,12 +91,14 @@ export async function addTokensToMetaMask(tokens: AddTokenArgs[]): Promise<boole
   }
 
   try {
-    console.log('[addTokensToMetaMask] Preparing batch watchAsset requests:', tokens);
+    console.log(
+      '[addTokensToMetaMask] Preparing batch wallet_watchAsset requests:',
+      tokens,
+    );
 
-    // Fire concurrent requests (MetaMask may batch UI prompts)
     const promises = tokens.map(async (token) => {
       try {
-        return await ethereum.request({
+        const res = await ethereum.request({
           method: 'wallet_watchAsset',
           params: {
             type: 'ERC20',
@@ -99,26 +109,24 @@ export async function addTokensToMetaMask(tokens: AddTokenArgs[]): Promise<boole
             },
           },
         });
+
+        return !!res;
       } catch (err) {
-        console.error('[addTokensToMetaMask] Error adding token:', token.address, err);
+        console.error(
+          '[addTokensToMetaMask] Error adding token:',
+          token.address,
+          normaliseError(err),
+        );
         return false;
       }
     });
 
     const results = await Promise.all(promises);
-    const successes = results.map((res) => !!res);
-
-    console.log('[addTokensToMetaMask] Batch watchAsset results:', successes);
-    return successes;
-  } catch (err: any) {
-    const msg =
-      err?.message ||
-      err?.code ||
-      (Object.keys(err || {}).length === 0
-        ? 'Unknown / empty error (likely user cancelled)'
-        : JSON.stringify(err));
-
-    console.log('[addTokensToMetaMask] Batch watchAsset error:', msg);
+    console.log('[addTokensToMetaMask] Batch wallet_watchAsset results:', results);
+    return results;
+  } catch (err) {
+    const msg = normaliseError(err);
+    console.log('[addTokensToMetaMask] Batch wallet_watchAsset error:', msg);
     return tokens.map(() => false);
   }
 }

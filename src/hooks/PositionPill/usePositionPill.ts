@@ -16,7 +16,16 @@ type UsePositionPillArgs = {
   onAfterTx?: () => Promise<unknown> | void;
 };
 
-export function usePositionPill({ marketId, positionId, tokenAddress, erc20Symbol, ticker, onAfterTx }: UsePositionPillArgs) {
+type TradeSide = 'back' | 'lay';
+
+export function usePositionPill({
+  marketId,
+  positionId,
+  tokenAddress,
+  erc20Symbol,
+  ticker,
+  onAfterTx,
+}: UsePositionPillArgs) {
   const { address } = useAccount();
   const { ledger, lmsr } = CONTRACTS.sepolia;
   const { writeContractAsync } = useWriteContract();
@@ -25,13 +34,15 @@ export function usePositionPill({ marketId, positionId, tokenAddress, erc20Symbo
   const layTx = useLedgerTx({ onAfterTx });
 
   const [size, setSize] = useState<string>('');
+  const [side, setSide] = useState<TradeSide>('back');
 
   const isBusyBack = backTx.status === 'pending';
   const isBusyLay = layTx.status === 'pending';
 
   const executeTrade = async (isBack: boolean) => {
+    const txHook = isBack ? backTx : layTx;
+
     if (!address) {
-      const txHook = isBack ? backTx : layTx;
       txHook.setErrorMessage('Wallet not connected.');
       return;
     }
@@ -42,8 +53,6 @@ export function usePositionPill({ marketId, positionId, tokenAddress, erc20Symbo
     const USDC_DECIMALS = 6;
     const usdcIn = BigInt(Math.round(parsed * 10 ** USDC_DECIMALS));
 
-    const txHook = isBack ? backTx : layTx;
-
     await txHook.runTx(
       async () => {
         console.log('[usePositionPill] about to send trade tx', {
@@ -52,7 +61,7 @@ export function usePositionPill({ marketId, positionId, tokenAddress, erc20Symbo
           isBack,
           usdcIn: usdcIn.toString(),
         });
-    
+
         const hash = await writeContractAsync({
           address: ledger as `0x${string}`,
           abi: ABIS.ledger,
@@ -66,7 +75,7 @@ export function usePositionPill({ marketId, positionId, tokenAddress, erc20Symbo
             0n,
           ],
         });
-    
+
         console.log('[usePositionPill] tx sent, hash:', hash);
         return hash;
       },
@@ -79,11 +88,17 @@ export function usePositionPill({ marketId, positionId, tokenAddress, erc20Symbo
   };
 
   const handleBack = async () => {
+    setSide('back');
     await executeTrade(true);
   };
 
   const handleLay = async () => {
+    setSide('lay');
     await executeTrade(false);
+  };
+
+  const handleTrade = async () => {
+    await executeTrade(side === 'back');
   };
 
   const handleAddToMetaMask = async () => {
@@ -94,6 +109,8 @@ export function usePositionPill({ marketId, positionId, tokenAddress, erc20Symbo
       ticker,
     });
 
+    // For now just use the base symbol / ticker;
+    // later we can prepend B-/L- using `side`.
     const symbolToUse = erc20Symbol || ticker || `POS${positionId.toString()}`;
     const decimalsToUse = 6;
 
@@ -113,10 +130,13 @@ export function usePositionPill({ marketId, positionId, tokenAddress, erc20Symbo
   return {
     size,
     setSize,
+    side,
+    setSide,
     isBusyBack,
     isBusyLay,
     handleBack,
     handleLay,
+    handleTrade,
     handleAddToMetaMask,
     backStatus: backTx.status,
     layStatus: layTx.status,

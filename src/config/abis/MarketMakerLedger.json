@@ -57,50 +57,6 @@
       "inputs": [
         {
           "indexed": true,
-          "internalType": "address",
-          "name": "recipient",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint16",
-          "name": "feeBps",
-          "type": "uint16"
-        },
-        {
-          "indexed": false,
-          "internalType": "bool",
-          "name": "enabled",
-          "type": "bool"
-        }
-      ],
-      "name": "FeeConfigUpdated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "recipient",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "feeAamount",
-          "type": "uint256"
-        }
-      ],
-      "name": "FeeSkimmed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
           "internalType": "uint256",
           "name": "marketId",
           "type": "uint256"
@@ -119,6 +75,19 @@
         }
       ],
       "name": "MarketCreated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "MarketLocked",
       "type": "event"
     },
     {
@@ -158,7 +127,13 @@
         {
           "indexed": false,
           "internalType": "address",
-          "name": "token",
+          "name": "backToken",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "layToken",
           "type": "address"
         },
         {
@@ -197,58 +172,15 @@
           "internalType": "uint256",
           "name": "positionId",
           "type": "uint256"
-        }
-      ],
-      "name": "PositionERC20Registered",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "payer",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "payee",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "positionId",
-          "type": "uint256"
         },
         {
           "indexed": false,
           "internalType": "bool",
           "name": "isBack",
           "type": "bool"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "baseAmount",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "quoteAmount",
-          "type": "uint256"
         }
       ],
-      "name": "Settlement",
+      "name": "PositionERC20Registered",
       "type": "event"
     },
     {
@@ -346,7 +278,7 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "account",
+          "name": "user",
           "type": "address"
         },
         {
@@ -437,13 +369,6 @@
       "type": "function"
     },
     {
-      "inputs": [],
-      "name": "claimAllPendingWinnings",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
       "inputs": [
         {
           "internalType": "string",
@@ -479,6 +404,26 @@
           "internalType": "bytes",
           "name": "oracleParams",
           "type": "bytes"
+        },
+        {
+          "internalType": "uint16",
+          "name": "feeBps",
+          "type": "uint16"
+        },
+        {
+          "internalType": "address",
+          "name": "marketCreator",
+          "type": "address"
+        },
+        {
+          "internalType": "address[]",
+          "name": "feeWhitelistAccounts",
+          "type": "address[]"
+        },
+        {
+          "internalType": "bool",
+          "name": "hasWhitelist",
+          "type": "bool"
         }
       ],
       "name": "createMarket",
@@ -519,7 +464,12 @@
         },
         {
           "internalType": "address",
-          "name": "token",
+          "name": "backToken",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "layToken",
           "type": "address"
         }
       ],
@@ -557,9 +507,78 @@
           "internalType": "uint256[]",
           "name": "positionIds",
           "type": "uint256[]"
+        },
+        {
+          "internalType": "address[]",
+          "name": "backTokens",
+          "type": "address[]"
+        },
+        {
+          "internalType": "address[]",
+          "name": "layTokens",
+          "type": "address[]"
         }
       ],
       "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "debugFeeState",
+      "outputs": [
+        {
+          "internalType": "uint16",
+          "name": "feeBps",
+          "type": "uint16"
+        },
+        {
+          "internalType": "uint16",
+          "name": "protocolShareBps",
+          "type": "uint16"
+        },
+        {
+          "internalType": "bool",
+          "name": "hasWhitelist",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "isWhitelisted",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "spent",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "redeemed",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "hwm",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "realFree",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
       "type": "function"
     },
     {
@@ -691,7 +710,7 @@
           "type": "uint256"
         }
       ],
-      "name": "erc20Name",
+      "name": "erc20BaseName",
       "outputs": [
         {
           "internalType": "string",
@@ -715,7 +734,103 @@
           "type": "uint256"
         }
       ],
-      "name": "erc20Symbol",
+      "name": "erc20BaseSymbol",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "positionId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isBack",
+          "type": "bool"
+        }
+      ],
+      "name": "erc20NameForSide",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        }
+      ],
+      "name": "erc20NameForToken",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "positionId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isBack",
+          "type": "bool"
+        }
+      ],
+      "name": "erc20SymbolForSide",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        }
+      ],
+      "name": "erc20SymbolForToken",
       "outputs": [
         {
           "internalType": "string",
@@ -748,6 +863,30 @@
     {
       "inputs": [
         {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "positionId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getBackPositionERC20",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "address",
           "name": "token",
           "type": "address"
@@ -771,6 +910,11 @@
           "type": "uint256"
         },
         {
+          "internalType": "bool",
+          "name": "isBack",
+          "type": "bool"
+        },
+        {
           "internalType": "string",
           "name": "positionName",
           "type": "string"
@@ -789,6 +933,30 @@
           "internalType": "string",
           "name": "marketTicker",
           "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "positionId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getLayPositionERC20",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
         }
       ],
       "stateMutability": "view",
@@ -930,6 +1098,30 @@
     {
       "inputs": [
         {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getMinTiltDelta",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "uint256",
           "name": "marketId",
           "type": "uint256"
@@ -1048,6 +1240,199 @@
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "invariant_checkSolvencyAllMarkets",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "ok",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "invariant_effectiveMin",
+      "outputs": [
+        {
+          "internalType": "int256",
+          "name": "effMin",
+          "type": "int256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "invariant_iscWithinLine",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "used",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "line",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "invariant_marketAccounting",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "lhs",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "rhs",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "invariant_redeemabilityState",
+      "outputs": [
+        {
+          "internalType": "int256",
+          "name": "netAlloc",
+          "type": "int256"
+        },
+        {
+          "internalType": "int256",
+          "name": "redeemable",
+          "type": "int256"
+        },
+        {
+          "internalType": "int256",
+          "name": "margin",
+          "type": "int256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "invariant_systemBalance",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "lhs",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "rhs",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "invariant_systemFunding",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "fullSetsSystem",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "invariant_tvl",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "tvl",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "aUSDCBalance",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "lockMarketPositions",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -1186,22 +1571,22 @@
     {
       "inputs": [
         {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        },
+        {
           "internalType": "address",
-          "name": "recipient",
+          "name": "account",
           "type": "address"
         },
         {
-          "internalType": "uint16",
-          "name": "bps",
-          "type": "uint16"
-        },
-        {
           "internalType": "bool",
-          "name": "enabled",
+          "name": "isFree",
           "type": "bool"
         }
       ],
-      "name": "setFeeConfig",
+      "name": "setFeeWhitelist",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -1220,6 +1605,19 @@
         }
       ],
       "name": "setIntentContract",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint16",
+          "name": "bps",
+          "type": "uint16"
+        }
+      ],
+      "name": "setNewMarketProtocolFeeShareBps",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

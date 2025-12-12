@@ -176,18 +176,19 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
           </thead>
           <tbody>
             {rows.map((row) => (
-              <PositionPill
-                key={row.positionId.toString()}
-                marketId={id}
-                positionId={row.positionId}
-                name={row.name}
-                ticker={row.ticker}
-                tokenAddress={row.tokenAddress}
-                balance={row.balance}
-                price={row.price}
-                erc20Symbol={row.erc20Symbol}
-                onAfterTx={handleAfterTx}
-              />
+           <PositionPill
+  key={row.tokenAddress}   // unique across Back/Lay
+  marketId={id}
+  positionId={row.positionId}
+  name={row.name}
+  ticker={row.ticker}
+  tokenAddress={row.tokenAddress}
+  balance={row.balance}
+  price={row.price}
+  erc20Symbol={row.erc20Symbol}
+  onAfterTx={handleAfterTx}
+/>
+
             ))}
           </tbody>
         </table>

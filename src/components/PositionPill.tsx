@@ -32,16 +32,24 @@ export function PositionPill({
   const {
     size,
     setSize,
+    side,
+    setSide,
     isBusyBack,
     isBusyLay,
-    handleBack,
-    handleLay,
+    handleTrade,
     handleAddToMetaMask,
     backStatus,
     layStatus,
     backErrorMessage,
     layErrorMessage,
-  } = usePositionPill({ marketId, positionId, tokenAddress, erc20Symbol, ticker, onAfterTx });
+  } = usePositionPill({
+    marketId,
+    positionId,
+    tokenAddress,
+    erc20Symbol,
+    ticker,
+    onAfterTx,
+  });
 
   const clamped = price != null ? Math.max(0, Math.min(price, 1)) : null;
   const priceLabel = clamped != null ? `$${clamped.toFixed(6)}` : '–';
@@ -65,6 +73,8 @@ export function PositionPill({
     return () => clearTimeout(timer);
   }, [balance]);
 
+  const isBusyCurrent = side === 'back' ? isBusyBack : isBusyLay;
+
   return (
     <tr>
       <td>
@@ -74,19 +84,29 @@ export function PositionPill({
         </div>
       </td>
 
-<td className="text-end align-middle">
-  <span style={{ transition: 'opacity 0.3s ease', opacity: fadeBalance ? 0.5 : 1 }}>
-    {balanceLabel}
-  </span>
-</td>
+      <td className="text-end align-middle">
+        <span
+          style={{
+            transition: 'opacity 0.3s ease',
+            opacity: fadeBalance ? 0.5 : 1,
+          }}
+        >
+          {balanceLabel}
+        </span>
+      </td>
 
       <td className="align-middle">
         <div className="d-flex flex-column">
-     <div className="fw-semibold text-primary text-end mb-1">
-  <span style={{ transition: 'opacity 0.3s ease', opacity: fadePrice ? 0.5 : 1 }}>
-    {priceLabel}
-  </span>
-</div>
+          <div className="fw-semibold text-primary text-end mb-1">
+            <span
+              style={{
+                transition: 'opacity 0.3s ease',
+                opacity: fadePrice ? 0.5 : 1,
+              }}
+            >
+              {priceLabel}
+            </span>
+          </div>
           <div className="d-flex justify-content-end">
             <PriceBar price={clamped} />
           </div>
@@ -107,6 +127,36 @@ export function PositionPill({
           />
 
           <div className="d-flex justify-content-end align-items-center gap-2 mt-1">
+            {/* Back/Lay toggle controlling how the ppUSDC input is interpreted */}
+            <div
+              className="btn-group btn-group-sm"
+              role="group"
+              aria-label="Back/Lay switch"
+            >
+              <button
+                type="button"
+                className={
+                  side === 'back'
+                    ? 'btn btn-sm btn-primary'
+                    : 'btn btn-sm btn-outline-primary'
+                }
+                onClick={() => setSide('back')}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className={
+                  side === 'lay'
+                    ? 'btn btn-sm btn-danger'
+                    : 'btn btn-sm btn-outline-danger'
+                }
+                onClick={() => setSide('lay')}
+              >
+                Lay
+              </button>
+            </div>
+
             <input
               type="number"
               min="0"
@@ -120,38 +170,22 @@ export function PositionPill({
 
             <button
               type="button"
-              className="btn btn-sm btn-primary"
-              onClick={handleBack}
-              disabled={isBusyBack}
+              className={
+                side === 'back'
+                  ? 'btn btn-sm btn-primary'
+                  : 'btn btn-sm btn-danger'
+              }
+              onClick={handleTrade}
+              disabled={isBusyCurrent}
             >
-              {isBusyBack && (
+              {isBusyCurrent && (
                 <span
                   className="spinner-border spinner-border-sm me-1"
                   role="status"
                   aria-hidden="true"
                 />
               )}
-              {backStatus === 'pending' ? 'Backing...' :
-               backStatus === 'success' ? 'Backed ✔' :
-               backStatus === 'error' ? 'Try again' : 'Back'}
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-primary"
-              onClick={handleLay}
-              disabled={isBusyLay}
-            >
-              {isBusyLay && (
-                <span
-                  className="spinner-border spinner-border-sm me-1"
-                  role="status"
-                  aria-hidden="true"
-                />
-              )}
-              {layStatus === 'pending' ? 'Laying...' :
-               layStatus === 'success' ? 'Laid ✔' :
-               layStatus === 'error' ? 'Try again' : 'Lay'}
+              Trade
             </button>
           </div>
         </div>

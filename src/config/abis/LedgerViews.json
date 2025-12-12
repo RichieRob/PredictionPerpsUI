@@ -29,6 +29,11 @@
               "type": "uint256"
             },
             {
+              "internalType": "bool",
+              "name": "isBack",
+              "type": "bool"
+            },
+            {
               "internalType": "string",
               "name": "name",
               "type": "string"
@@ -78,6 +83,11 @@
               "internalType": "uint256",
               "name": "positionId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "isBack",
+              "type": "bool"
             },
             {
               "internalType": "string",
