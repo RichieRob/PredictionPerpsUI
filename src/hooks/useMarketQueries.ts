@@ -4,11 +4,13 @@
 import { useAccount, useReadContract } from 'wagmi';
 import { CONTRACTS, ABIS } from '../config/contracts';
 
+const ZERO = '0x0000000000000000000000000000000000000000' as const;
+
 export function useMarketQueries(id: bigint) {
-  const { ledger, ledgerViews, lmsr } = CONTRACTS.sepolia;
+  const { ledger, ledgerViews } = CONTRACTS.sepolia;
   const { address } = useAccount();
 
-  // Market meta
+  // Market meta (name, ticker, positionsLocked)
   const marketMetaQuery = useReadContract({
     address: ledger as `0x${string}`,
     abi: ABIS.ledger,
@@ -26,32 +28,46 @@ export function useMarketQueries(id: bigint) {
   const positionsQuery = useReadContract({
     address: ledgerViews as `0x${string}`,
     abi: ABIS.ledgerViews,
-    functionName: positionsFunctionName,
-    args: positionsArgs,
-    query: {
-      enabled: true,
-    },
+    functionName: positionsFunctionName as any,
+    args: positionsArgs as any,
   });
 
-  // Back prices + reserve
+  const positionsLen = Array.isArray(positionsQuery.data)
+    ? (positionsQuery.data as any[]).length
+    : 0;
+
+  // ✅ pricing MM per market
+  const pricingMMQuery = useReadContract({
+    address: ledger as `0x${string}`,
+    abi: ABIS.ledger,
+    functionName: 'getPricingMM',
+    args: [id],
+  });
+
+  const pricingMM = pricingMMQuery.data as `0x${string}` | undefined;
+
+  const hasPositions = positionsLen > 0;
+  const hasPricingMM = !!pricingMM && pricingMM !== ZERO;
+
+  // ✅ Back prices + reserve from pricingMM (IMarketMaker format)
   const pricesQuery = useReadContract({
-    address: lmsr as `0x${string}`,
-    abi: ABIS.lmsr,
+    address: (pricingMM ?? ZERO) as `0x${string}`,
+    abi: ABIS.marketMaker,
     functionName: 'getAllBackPricesWad',
     args: [id],
     query: {
-      enabled: !!positionsQuery.data && (positionsQuery.data as any[]).length > 0,
+      enabled: hasPositions && hasPricingMM,
     },
   });
 
-  // Lay prices
+  // ✅ Lay prices from pricingMM (IMarketMaker format)
   const layPricesQuery = useReadContract({
-    address: lmsr as `0x${string}`,
-    abi: ABIS.lmsr,
+    address: (pricingMM ?? ZERO) as `0x${string}`,
+    abi: ABIS.marketMaker,
     functionName: 'getAllLayPricesWad',
     args: [id],
     query: {
-      enabled: !!positionsQuery.data && (positionsQuery.data as any[]).length > 0,
+      enabled: hasPositions && hasPricingMM,
     },
   });
 
@@ -61,17 +77,20 @@ export function useMarketQueries(id: bigint) {
     abi: ABIS.ledger,
     functionName: 'getReserveExposure',
     args: address ? [address, id] : undefined,
-    query: {
-      enabled: !!address,
-    },
+    query: { enabled: !!address },
   });
 
   return {
     address,
     marketMetaQuery,
     positionsQuery,
+
+    pricingMM,
+    pricingMMQuery,
+
     pricesQuery,
     layPricesQuery,
+
     reserveExposureQuery,
   };
 }

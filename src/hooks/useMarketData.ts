@@ -14,8 +14,8 @@ export type PositionRow = {
   erc20Symbol: string;
   balance: number;      // BACK exposure
   layBalance: number;   // LAY exposure
-  price: number | null;
-  layPrice: number | null;
+  price: number | null; // BACK price
+  layPrice: number | null; // LAY price
 };
 
 // Struct types mirroring LedgerViews
@@ -34,6 +34,11 @@ type PositionInfoWithBalanceExtended = PositionInfoExtended & {
 
 export type { SortKey, SortDir } from './useSortedRows';
 
+function wadToNumber(wad: bigint): number | null {
+  const n = Number(wad) / 1e18;
+  return Number.isFinite(n) ? n : null;
+}
+
 export function useMarketData(id: bigint) {
   const {
     address,
@@ -42,16 +47,24 @@ export function useMarketData(id: bigint) {
     pricesQuery,
     layPricesQuery,
     reserveExposureQuery,
+    pricingMM,
+    pricingMMQuery,
   } = useMarketQueries(id);
 
+  // ---- Market meta ----
   const {
     data: marketData,
     refetch: refetchMarketMeta,
     isLoading: isLoadingMarketMeta,
   } = marketMetaQuery;
 
-  const [marketName, marketTicker] = (marketData || []) as [string, string];
+  const [marketName, marketTicker, positionsLocked] = (marketData || []) as [
+    string,
+    string,
+    boolean
+  ];
 
+  // ---- Positions ----
   const {
     data: positionsInfoRaw,
     refetch: refetchPositionsInfo,
@@ -64,7 +77,7 @@ export function useMarketData(id: bigint) {
       | PositionInfoWithBalanceExtended[]
       | undefined) || [];
 
-  // Collapse Back + Lay into logical positions
+  // Collapse Back + Lay into logical positions (1 row per positionId)
   const logicalPositions = useMemo(() => {
     type Logical = {
       positionId: bigint;
@@ -95,26 +108,26 @@ export function useMarketData(id: bigint) {
 
       if (info.isBack) {
         entry.backToken = info.tokenAddress as `0x${string}`;
-        if ('balance' in info) {
-          entry.backBalance = info.balance ?? 0n;
-        }
+        if ('balance' in info) entry.backBalance = info.balance ?? 0n;
       } else {
         entry.layToken = info.tokenAddress as `0x${string}`;
-        if ('balance' in info) {
-          entry.layBalance = info.balance ?? 0n;
-        }
+        if ('balance' in info) entry.layBalance = info.balance ?? 0n;
       }
     }
 
-    // Only keep entries that actually have a Back token listed
+    // Only keep entries that actually have a Back token listed (one per slot)
     return Array.from(map.values()).filter((e) => !!e.backToken);
   }, [rawInfos]);
 
-  const positions = logicalPositions.map((p) => p.positionId);
+  const positions = useMemo(
+    () => logicalPositions.map((p) => p.positionId),
+    [logicalPositions]
+  );
+
   const havePositions =
     positionsInfoRaw !== undefined && logicalPositions.length > 0;
 
-  // Prices (Back + Lay)
+  // ---- Prices (IMarketMaker arrays) ----
   const {
     data: pricesRaw,
     refetch: refetchMarketPrices,
@@ -127,50 +140,52 @@ export function useMarketData(id: bigint) {
     isLoading: isLoadingLayPrices,
   } = layPricesQuery;
 
-  const [allPrices, reservePriceWad] = (pricesRaw || [[], 0n]) as [
-    { positionId: bigint; priceWad: bigint }[],
-    bigint
-  ];
+  // pricesRaw shape: [positionIds[], priceWads[], reservePriceWad]
+  const [backPosIds, backPriceWads, reservePriceWad] = (pricesRaw ||
+    [[], [], 0n]) as [bigint[], bigint[], bigint];
 
-  const positionPrices: (number | null)[] = useMemo(() => {
-    if (positions.length === 0) return [];
+  // layPricesRaw shape: [positionIds[], priceWads[]]
+  const [layPosIds, layPriceWads] = (layPricesRaw ||
+    [[], []]) as [bigint[], bigint[]];
 
-    const priceMap = new Map<bigint, number>();
-    allPrices.forEach(({ positionId, priceWad }) => {
-      const n = Number(priceWad) / 1e18;
-      if (Number.isFinite(n)) {
-        priceMap.set(positionId, n);
-      }
-    });
-
-    return positions.map((posId) => priceMap.get(posId) ?? null);
-  }, [allPrices, positions]);
-
-  const layPriceByPosId: Map<bigint, number> = useMemo(() => {
+  const backPriceByPosId = useMemo(() => {
     const map = new Map<bigint, number>();
-    if (!layPricesRaw) return map;
-
-    (layPricesRaw as { positionId: bigint; priceWad: bigint }[]).forEach(
-      ({ positionId, priceWad }) => {
-        const n = Number(priceWad) / 1e18;
-        if (Number.isFinite(n)) {
-          map.set(positionId, n);
-        }
-      }
-    );
+    for (let i = 0; i < backPosIds.length; i++) {
+      const posId = backPosIds[i];
+      const wad = backPriceWads[i] ?? 0n;
+      const n = wadToNumber(wad);
+      if (n != null) map.set(posId, n);
+    }
     return map;
-  }, [layPricesRaw]);
+  }, [backPosIds, backPriceWads]);
+
+  const layPriceByPosId = useMemo(() => {
+    const map = new Map<bigint, number>();
+    for (let i = 0; i < layPosIds.length; i++) {
+      const posId = layPosIds[i];
+      const wad = layPriceWads[i] ?? 0n;
+      const n = wadToNumber(wad);
+      if (n != null) map.set(posId, n);
+    }
+    return map;
+  }, [layPosIds, layPriceWads]);
+
+  const positionPrices: (number | null)[] = useMemo(
+    () => positions.map((posId) => backPriceByPosId.get(posId) ?? null),
+    [positions, backPriceByPosId]
+  );
 
   const layPrices: (number | null)[] = useMemo(
     () => positions.map((posId) => layPriceByPosId.get(posId) ?? null),
     [positions, layPriceByPosId]
   );
 
-  let reservePrice: number | null = null;
-  const reserveN = Number(reservePriceWad) / 1e18;
-  if (Number.isFinite(reserveN)) reservePrice = reserveN;
+  const reservePrice = useMemo(() => {
+    const n = wadToNumber(reservePriceWad);
+    return n == null ? null : n;
+  }, [reservePriceWad]);
 
-  // OTHER exposure
+  // ---- OTHER exposure ----
   const {
     data: reserveExposureRaw,
     refetch: refetchReserveExposure,
@@ -189,12 +204,31 @@ export function useMarketData(id: bigint) {
   const reserveExposure =
     otherExposureRaw !== undefined ? otherExposure : previousOtherExposure;
 
-  // All-or-nothing readiness
+  // ---- Readiness ----
   const havePrices =
     positions.length === 0 || (!!pricesRaw && !!layPricesRaw);
   const fullyReady = havePositions && havePrices && !!positionsInfoRaw;
 
-  // Rows (one per logical position)
+  // 🔎 Debug (kept, but now with useful decode info)
+  if (typeof window !== 'undefined') {
+    console.log('[useMarketData]', {
+      marketId: id.toString(),
+      pricingMM,
+      pricingMMErr: pricingMMQuery?.error,
+      positionsLen: logicalPositions.length,
+      pricesEnabled: pricesQuery.isEnabled,
+      pricesStatus: pricesQuery.status,
+      pricesErr: pricesQuery.error,
+      layPricesEnabled: layPricesQuery.isEnabled,
+      layPricesStatus: layPricesQuery.status,
+      layPricesErr: layPricesQuery.error,
+      backPricesDecoded: backPosIds.length,
+      layPricesDecoded: layPosIds.length,
+      reservePrice: reservePrice ?? null,
+    });
+  }
+
+  // ---- Rows ----
   const rows: PositionRow[] = useMemo(() => {
     if (!fullyReady) return [];
 
@@ -211,8 +245,8 @@ export function useMarketData(id: bigint) {
         ticker: entry.ticker,
         tokenAddress: entry.backToken as `0x${string}`,
         erc20Symbol: entry.erc20Symbol,
-        balance,           // Back
-        layBalance,        // Lay
+        balance,
+        layBalance,
         price: positionPrices[idx],
         layPrice: layPrices[idx],
       };
@@ -222,10 +256,10 @@ export function useMarketData(id: bigint) {
   const previousRows = usePrevious(rows) || [];
   const displayRows = fullyReady ? rows : previousRows;
 
-  // Sorting
+  // ---- Sorting ----
   const { sortedRows, sort, sortKey, sortDir } = useSortedRows(displayRows);
 
-  // Refetch all
+  // ---- Refetch all ----
   const refetchAll = async () => {
     await Promise.allSettled([
       refetchMarketMeta?.(),
@@ -248,11 +282,12 @@ export function useMarketData(id: bigint) {
     marketTicker,
     rows: sortedRows,
     reservePrice,
-    reserveExposure, // OTHER balance, 6dp → number
+    reserveExposure,
     sort,
     sortKey,
     sortDir,
     refetchAll,
     isLoading,
+    positionsLocked,
   };
 }

@@ -193,6 +193,25 @@
           "type": "uint256"
         },
         {
+          "indexed": true,
+          "internalType": "address",
+          "name": "mm",
+          "type": "address"
+        }
+      ],
+      "name": "PricingMarketMakerSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        },
+        {
           "indexed": false,
           "internalType": "uint256",
           "name": "amount",
@@ -1219,6 +1238,25 @@
     {
       "inputs": [
         {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getPricingMM",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "mm",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "address",
           "name": "account",
           "type": "address"
@@ -1655,6 +1693,24 @@
         }
       ],
       "name": "setPositionERC20Implementation",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "marketId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "mm",
+          "type": "address"
+        }
+      ],
+      "name": "setPricingMarketMaker",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

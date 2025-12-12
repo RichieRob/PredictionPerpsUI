@@ -14,6 +14,38 @@ type RunTxOptions = {
   onLocalAfterTx?: () => Promise<unknown> | void;
 };
 
+function pickViemMessage(err: any): string {
+  // viem error shapes vary; these are the ones that usually contain the real reason.
+  const meta =
+    err?.cause?.metaMessages ||
+    err?.metaMessages ||
+    err?.cause?.cause?.metaMessages ||
+    null;
+
+  if (Array.isArray(meta) && meta.length) {
+    // Often includes "Error: <reason>" or custom error hints
+    return meta.join('\n');
+  }
+
+  const reason =
+    err?.cause?.reason ||
+    err?.cause?.cause?.reason ||
+    err?.reason ||
+    null;
+
+  if (typeof reason === 'string' && reason.trim()) return reason;
+
+  const short =
+    err?.shortMessage ||
+    err?.cause?.shortMessage ||
+    err?.cause?.details ||
+    err?.details ||
+    err?.message ||
+    'Transaction failed';
+
+  return short;
+}
+
 export function useLedgerTx({ onAfterTx }: UseLedgerTxArgs) {
   const publicClient = usePublicClient();
 
@@ -45,13 +77,7 @@ export function useLedgerTx({ onAfterTx }: UseLedgerTxArgs) {
       return { txHash, receipt };
     } catch (err: any) {
       console.error('❌ Ledger tx failed:', err);
-      const short =
-        err?.shortMessage ||
-        err?.cause?.shortMessage ||
-        err?.cause?.details ||
-        err?.message ||
-        'Transaction failed';
-      setErrorMessage(short);
+      setErrorMessage(pickViemMessage(err));
       setStatus('error');
       return null;
     }

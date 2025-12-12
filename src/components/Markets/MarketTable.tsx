@@ -43,6 +43,7 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
     sortDir,
     refetchAll,
     isLoading,
+    positionsLocked,
   } = useMarketData(id);
 
   const title = marketName || `Market #${id.toString()}`;
@@ -59,7 +60,7 @@ export function MarketTable({ id, onAfterTx }: MarketTableProps) {
   const hasReservePrice =
     typeof reservePrice === 'number' && reservePrice != null;
 
-  const showOtherRow = hasReservePrice;
+const showOtherRow = hasReservePrice && !positionsLocked;
 
   let otherBackLabel = '—';
   let otherLayLabel = '—';

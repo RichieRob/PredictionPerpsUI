@@ -1,13 +1,10 @@
+// src/config/contracts.ts
 import marketMakerLedgerAbiJson from './abis/MarketMakerLedger.json';
 import ppUsdcAbiJson from './abis/PpUSDC.json';
-import lmsrAbiJson from './abis/LMSRMarketMaker.json';
-import ledgerViewsAbiJson from './abis/LedgerViews.json'
+import ledgerViewsAbiJson from './abis/LedgerViews.json';
 import mockOracleAbiJson from './abis/MockOracle.json';
 
-
 import deploymentsJson from '../../../PredictionPerpsContractsV2/deployments.json';
-
-// ---- Types that match your deployments.json ----
 
 interface CoreDeployment {
   chainId: string;
@@ -15,14 +12,13 @@ interface CoreDeployment {
   MockUSDC: string;
   MockAUSDC: string;
   MockAavePool: string;
-  MockOracle: string; // <—
+  MockOracle: string;
   PpUSDC: string;
   Ledger: string;
   LedgerViews: string;
   PositionERC20: string;
   Permit2: string;
 }
-
 
 interface LmsrDeployment {
   LMSRMarketMaker: string;
@@ -38,14 +34,11 @@ interface Deployments {
 
 const deployments = deploymentsJson as Deployments;
 
-// Optional sanity check
 if (deployments.core.chainId !== '11155111') {
   console.warn(
     `⚠ Loaded deployments for chain ${deployments.core.chainId}, expected Sepolia (11155111).`
   );
 }
-
-// ---- Addresses for the app ----
 
 export const CONTRACTS = {
   sepolia: {
@@ -56,22 +49,50 @@ export const CONTRACTS = {
     usdc:         deployments.core.MockUSDC,
     ausdc:        deployments.core.MockAUSDC,
     aavePool:     deployments.core.MockAavePool,
-    mockOracle: deployments.core.MockOracle,
+    mockOracle:   deployments.core.MockOracle,
     positionImpl: deployments.core.PositionERC20,
     permit2:      deployments.core.Permit2,
 
-    lmsr:     deployments.lmsr.LMSRMarketMaker,
+    // optional convenience
     marketId: BigInt(deployments.lmsr.marketId),
   },
 } as const;
-
-// ---- ABIs ----
 
 export const ABIS = {
   ledger: (marketMakerLedgerAbiJson as any).abi,
   ledgerViews: (ledgerViewsAbiJson as any).abi,
   ppUSDC: (ppUsdcAbiJson as any).abi,
-  lmsr:   (lmsrAbiJson as any).abi,
-    mockOracle: (mockOracleAbiJson as any).abi, // <—
+  mockOracle: (mockOracleAbiJson as any).abi,
 
-};
+  // ✅ IMarketMaker view ABI (matches your Solidity interface)
+  marketMaker: [
+    {
+      type: 'function',
+      name: 'getAllBackPricesWad',
+      stateMutability: 'view',
+      inputs: [{ name: 'marketId', type: 'uint256' }],
+      outputs: [
+        { name: 'positionIds', type: 'uint256[]' },
+        { name: 'priceWads', type: 'uint256[]' },
+        { name: 'reservePriceWad', type: 'uint256' },
+      ],
+    },
+    {
+      type: 'function',
+      name: 'getAllLayPricesWad',
+      stateMutability: 'view',
+      inputs: [{ name: 'marketId', type: 'uint256' }],
+      outputs: [
+        { name: 'positionIds', type: 'uint256[]' },
+        { name: 'priceWads', type: 'uint256[]' },
+      ],
+    },
+    {
+      type: 'function',
+      name: 'getReservePriceWad',
+      stateMutability: 'view',
+      inputs: [{ name: 'marketId', type: 'uint256' }],
+      outputs: [{ name: '', type: 'uint256' }],
+    },
+  ],
+} as const;

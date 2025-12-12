@@ -62,29 +62,10 @@ export function CreateMarketView({ oracleAddress }: Props) {
                 </div>
               )}
             </div>
+          </div>
 
-            <div className="col-md-4">
-              <label className="form-label">AMM</label>
-              <select
-                className="form-select"
-                value={m.amm}
-                onChange={(e) => m.setAmm(e.target.value as any)}
-              >
-                <option value="LMSR">LMSR</option>
-                <option value="VF">VF</option>
-                <option value="NormalizedLinear">NormalizedLinear</option>
-              </select>
-            </div>
-
-            <div className="col-md-4">
-              <label className="form-label">Seed AMM with ppUSDC</label>
-              <input
-                className="form-control"
-                value={m.ammSeedPpUSDC}
-                onChange={(e) => m.setAmmSeedPpUSDC(e.target.value)}
-                placeholder="(wired later)"
-              />
-            </div>
+          <div className="mt-3 text-muted small">
+            AMM/DMM + seed are not set at market creation in this flow (dmm=0, isc=0).
           </div>
         </div>
       </div>

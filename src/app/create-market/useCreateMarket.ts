@@ -9,7 +9,6 @@ import { useLedgerTx } from '../../hooks/useLedgerTx';
 import { isValidTicker, sanitizeTicker } from './tickers';
 
 type PositionDraft = { name: string; ticker: string };
-type AmmKind = 'LMSR' | 'VF' | 'NormalizedLinear';
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000' as const;
 
@@ -25,9 +24,6 @@ export function useCreateMarket() {
 
   const [marketName, setMarketName] = useState('');
   const [marketTicker, setMarketTicker] = useState('');
-
-  const [amm, setAmm] = useState<AmmKind>('LMSR');
-  const [ammSeedPpUSDC, setAmmSeedPpUSDC] = useState('');
 
   const [positionsCount, setPositionsCount] = useState(2);
   const [positions, setPositions] = useState<PositionDraft[]>([
@@ -57,9 +53,7 @@ export function useCreateMarket() {
     updatePos(i, { ticker: sanitizeTicker(raw, 4) });
 
   const marketTickerOk = isValidTicker(marketTicker, 4);
-  const positionsOk = positions.every(
-    (p) => p.name.trim().length > 0 && isValidTicker(p.ticker, 4)
-  );
+  const positionsOk = positions.every((p) => p.name.trim().length > 0 && isValidTicker(p.ticker, 4));
 
   const canCreate =
     !!address &&
@@ -71,17 +65,21 @@ export function useCreateMarket() {
   const createMarket = async (oracleAddress: `0x${string}`) => {
     if (!address) return;
 
+    setCreatedMarketId(null);
+
+    // IMPORTANT: this flow does NOT set DMM / ISC at creation time.
     const dmm = ZERO_ADDR;
     const iscAmount = 0n;
-    const doesResolve = true;
 
+    const doesResolve = true;
     const oracleParams = '0x' as `0x${string}`;
     const feeBps = 0;
     const marketCreator = address;
     const feeWhitelistAccounts: `0x${string}`[] = [];
     const hasWhitelist = false;
 
-    const res = await runTx(() =>
+    // ---- 1) createMarket ----
+    const res1 = await runTx(() =>
       writeContractAsync({
         address: ledger as `0x${string}`,
         abi: ABIS.ledger,
@@ -101,10 +99,10 @@ export function useCreateMarket() {
         ],
       })
     );
+    if (!res1) return;
 
-    if (!res) return;
-
-    for (const log of res.receipt.logs) {
+    let marketId: bigint | null = null;
+    for (const log of res1.receipt.logs) {
       try {
         const decoded = decodeEventLog({
           abi: ABIS.ledger,
@@ -112,12 +110,38 @@ export function useCreateMarket() {
           topics: log.topics as any,
         });
         if (decoded.eventName === 'MarketCreated') {
-          const mid = (decoded.args as any).marketId as bigint;
-          setCreatedMarketId(mid);
-          return;
+          marketId = (decoded.args as any).marketId as bigint;
+          break;
         }
       } catch {}
     }
+    if (marketId === null) return;
+
+    setCreatedMarketId(marketId);
+
+    // ---- 2) createPositions ----
+    const posMetas = positions.map((p) => ({ name: p.name, ticker: p.ticker }));
+
+    const res2 = await runTx(() =>
+      writeContractAsync({
+        address: ledger as `0x${string}`,
+        abi: ABIS.ledger,
+        functionName: 'createPositions',
+        args: [marketId, posMetas],
+      })
+    );
+    if (!res2) return;
+
+    // ---- 3) lockMarketPositions (so OTHER disappears immediately) ----
+    const res3 = await runTx(() =>
+      writeContractAsync({
+        address: ledger as `0x${string}`,
+        abi: ABIS.ledger,
+        functionName: 'lockMarketPositions',
+        args: [marketId],
+      })
+    );
+    if (!res3) return;
   };
 
   return {
@@ -130,11 +154,6 @@ export function useCreateMarket() {
     marketTicker,
     onMarketTickerChange,
     marketTickerOk,
-
-    amm,
-    setAmm,
-    ammSeedPpUSDC,
-    setAmmSeedPpUSDC,
 
     positionsCount,
     setPositionsCount,
