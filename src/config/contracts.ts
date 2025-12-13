@@ -4,6 +4,9 @@ import ppUsdcAbiJson from './abis/PpUSDC.json';
 import ledgerViewsAbiJson from './abis/LedgerViews.json';
 import mockOracleAbiJson from './abis/MockOracle.json';
 
+import marketMakerHubAbiJson from './abis/MarketMakerHub.json';
+import lmsrCloneableAbiJson from './abis/LMSRCloneable.json';
+
 import deploymentsJson from '../../../PredictionPerpsContractsV2/deployments.json';
 
 interface CoreDeployment {
@@ -20,25 +23,29 @@ interface CoreDeployment {
   Permit2: string;
 }
 
+interface AmmDeployment {
+  MarketMakerHub: string;
+  TYPE_LMSR: string; // bytes32 string in json
+  LMSRCloneableImpl: string;
+}
+
 interface LmsrDeployment {
-  LMSRMarketMaker: string;
   marketId: string;
   marketName: string;
   marketTicker: string;
+  dmm: string;
+  pricingMM: string;
+  hub: string;
+  lmsrImpl: string;
 }
 
 interface Deployments {
   core: CoreDeployment;
-  lmsr: LmsrDeployment;
+  lmsr?: LmsrDeployment;
+  amm: AmmDeployment;
 }
 
 const deployments = deploymentsJson as Deployments;
-
-if (deployments.core.chainId !== '11155111') {
-  console.warn(
-    `⚠ Loaded deployments for chain ${deployments.core.chainId}, expected Sepolia (11155111).`
-  );
-}
 
 export const CONTRACTS = {
   sepolia: {
@@ -53,8 +60,12 @@ export const CONTRACTS = {
     positionImpl: deployments.core.PositionERC20,
     permit2:      deployments.core.Permit2,
 
+    // AMM infra
+    marketMakerHub: deployments.amm.MarketMakerHub,
+    typeLmsr:       deployments.amm.TYPE_LMSR as `0x${string}`,
+
     // optional convenience
-    marketId: BigInt(deployments.lmsr.marketId),
+    marketId: deployments.lmsr?.marketId ? BigInt(deployments.lmsr.marketId) : 0n,
   },
 } as const;
 
@@ -64,13 +75,16 @@ export const ABIS = {
   ppUSDC: (ppUsdcAbiJson as any).abi,
   mockOracle: (mockOracleAbiJson as any).abi,
 
-  // ✅ IMarketMaker view ABI (matches your Solidity interface)
+  marketMakerHub: (marketMakerHubAbiJson as any).abi,
+  lmsrCloneable: (lmsrCloneableAbiJson as any).abi,
+
+  // ✅ Minimal IMarketMaker view ABI used by pricing MM reads
   marketMaker: [
     {
       type: 'function',
       name: 'getAllBackPricesWad',
       stateMutability: 'view',
-      inputs: [{ name: 'marketId', type: 'uint256' }],
+      inputs: [{ name: 'marketId_', type: 'uint256' }],
       outputs: [
         { name: 'positionIds', type: 'uint256[]' },
         { name: 'priceWads', type: 'uint256[]' },
@@ -81,7 +95,7 @@ export const ABIS = {
       type: 'function',
       name: 'getAllLayPricesWad',
       stateMutability: 'view',
-      inputs: [{ name: 'marketId', type: 'uint256' }],
+      inputs: [{ name: 'marketId_', type: 'uint256' }],
       outputs: [
         { name: 'positionIds', type: 'uint256[]' },
         { name: 'priceWads', type: 'uint256[]' },
@@ -91,8 +105,29 @@ export const ABIS = {
       type: 'function',
       name: 'getReservePriceWad',
       stateMutability: 'view',
-      inputs: [{ name: 'marketId', type: 'uint256' }],
+      inputs: [{ name: 'marketId_', type: 'uint256' }],
       outputs: [{ name: '', type: 'uint256' }],
     },
-  ],
+    {
+      type: 'function',
+      name: 'getBackPriceWad',
+      stateMutability: 'view',
+      inputs: [
+        { name: 'marketId_', type: 'uint256' },
+        { name: 'ledgerPositionId', type: 'uint256' },
+      ],
+      outputs: [{ name: '', type: 'uint256' }],
+    },
+    {
+      type: 'function',
+      name: 'getLayPriceWad',
+      stateMutability: 'view',
+      inputs: [
+        { name: 'marketId_', type: 'uint256' },
+        { name: 'ledgerPositionId', type: 'uint256' },
+      ],
+      outputs: [{ name: '', type: 'uint256' }],
+    },
+  ] as const,
 } as const;
+

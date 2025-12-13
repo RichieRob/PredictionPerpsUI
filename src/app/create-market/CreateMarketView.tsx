@@ -18,6 +18,9 @@ export function CreateMarketView({ oracleAddress }: Props) {
         <div>
           <h1 className="h4 mb-1">Create market</h1>
           <div className="text-muted small">Resolving markets only.</div>
+          <div className="text-muted small">
+            Oracle: <span className="font-monospace">{oracleAddress}</span>
+          </div>
         </div>
 
         <Link href="/" className="btn btn-outline-secondary btn-sm">
@@ -25,11 +28,29 @@ export function CreateMarketView({ oracleAddress }: Props) {
         </Link>
       </header>
 
+      {/* What will happen */}
+      <div className="card mb-3">
+        <div className="card-body">
+          <h2 className="h6 mb-2">What this button will do</h2>
+          <ol className="mb-0 small text-muted">
+            <li>Clone an LMSR market maker (UNBOUND)</li>
+            <li>Create a resolving market (doesResolve=true) with dmm=0 and isc=0</li>
+            <li>Create positions</li>
+            <li>Init LMSR for that market (bind + seed)</li>
+            <li>Set the LMSR clone as the pricing market maker</li>
+            <li>(Optional) Lock positions</li>
+          </ol>
+        </div>
+      </div>
+
+      {/* Status banners */}
       {m.status === 'pending' && (
         <div className="alert alert-warning py-2 mb-3">Transaction pending…</div>
       )}
       {m.status === 'error' && (
-        <div className="alert alert-danger py-2 mb-3">{m.errorMessage}</div>
+        <div className="alert alert-danger py-2 mb-3" style={{ whiteSpace: 'pre-wrap' }}>
+          {m.errorMessage}
+        </div>
       )}
       {m.status === 'success' && (
         <div className="alert alert-success py-2 mb-3">
@@ -37,6 +58,51 @@ export function CreateMarketView({ oracleAddress }: Props) {
         </div>
       )}
 
+      {/* Per-step progress */}
+      <div className="card mb-3">
+        <div className="card-body">
+          <h2 className="h6 mb-2">Progress</h2>
+          <ol className="mb-0">
+            {m.steps.map((s) => (
+              <li key={s.key} className="mb-1">
+                <div className="d-flex align-items-center justify-content-between">
+                  <span>
+                    {s.title}{' '}
+                    <span className="text-muted small">({s.status})</span>
+                  </span>
+                  {s.txHash && (
+                    <span className="text-muted small font-monospace">
+                      {s.txHash.slice(0, 10)}…
+                    </span>
+                  )}
+                </div>
+                {s.error && (
+                  <div className="text-danger small" style={{ whiteSpace: 'pre-wrap' }}>
+                    {s.error}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
+
+          {(m.createdMarketId !== null || m.createdMM !== null) && (
+            <div className="mt-3 small text-muted">
+              <div>
+                Market ID:{' '}
+                <span className="font-monospace">
+                  {m.createdMarketId !== null ? m.createdMarketId.toString() : '—'}
+                </span>
+              </div>
+              <div>
+                LMSR MM:{' '}
+                <span className="font-monospace">{m.createdMM ?? '—'}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Form */}
       <div className="card mb-3">
         <div className="card-body">
           <div className="row g-3">
@@ -52,7 +118,9 @@ export function CreateMarketView({ oracleAddress }: Props) {
             <div className="col-md-4">
               <label className="form-label">Market ticker (max 4)</label>
               <input
-                className={`form-control ${m.marketTicker.length > 0 && !m.marketTickerOk ? 'is-invalid' : ''}`}
+                className={`form-control ${
+                  m.marketTicker.length > 0 && !m.marketTickerOk ? 'is-invalid' : ''
+                }`}
                 value={m.marketTicker}
                 onChange={(e) => m.onMarketTickerChange(e.target.value)}
               />
@@ -65,7 +133,7 @@ export function CreateMarketView({ oracleAddress }: Props) {
           </div>
 
           <div className="mt-3 text-muted small">
-            AMM/DMM + seed are not set at market creation in this flow (dmm=0, isc=0).
+            Market creation uses dmm=0 and isc=0; LMSR is cloned and initialized afterwards.
           </div>
         </div>
       </div>
@@ -84,14 +152,17 @@ export function CreateMarketView({ oracleAddress }: Props) {
                 className="form-control form-control-sm"
                 style={{ width: 90 }}
                 value={m.positionsCount}
-                onChange={(e) => m.setPositionsCount(Math.max(2, Number(e.target.value) || 2))}
+                onChange={(e) =>
+                  m.setPositionsCount(Math.max(2, Number(e.target.value) || 2))
+                }
               />
             </div>
           </div>
 
           <div className="list-group">
             {m.positions.map((p, i) => {
-              const tickerOk = p.ticker.length === 0 ? true : /^[A-Z0-9]{1,4}$/.test(p.ticker);
+              const tickerOk =
+                p.ticker.length === 0 ? true : /^[A-Z0-9]{1,4}$/.test(p.ticker);
               return (
                 <div key={i} className="list-group-item">
                   <div className="row g-2 align-items-center">
@@ -106,7 +177,9 @@ export function CreateMarketView({ oracleAddress }: Props) {
                     <div className="col-md-4">
                       <label className="form-label small mb-1">Ticker (max 4)</label>
                       <input
-                        className={`form-control ${p.ticker.length > 0 && !tickerOk ? 'is-invalid' : ''}`}
+                        className={`form-control ${
+                          p.ticker.length > 0 && !tickerOk ? 'is-invalid' : ''
+                        }`}
                         value={p.ticker}
                         onChange={(e) => m.onPositionTickerChange(i, e.target.value)}
                       />
