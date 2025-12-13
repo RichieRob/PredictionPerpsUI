@@ -8,7 +8,7 @@ import { ABIS, CONTRACTS } from '../../config/contracts';
 import { useLedgerTx } from '../../hooks/useLedgerTx';
 import { isValidTicker, sanitizeTicker } from './tickers';
 
-type PositionDraft = { name: string; ticker: string };
+type PositionDraft = { name: string; ticker: string; weight: string };
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000' as const;
 const WAD = 10n ** 18n;
@@ -44,6 +44,37 @@ function makeSteps(): Step[] {
   ];
 }
 
+const USDC_SCALE = 10n ** 6n;
+
+function parseUSDC6(input: string): bigint | null {
+  // accepts "12", "12.3", "12.34" etc. Pads/truncs to 6 decimals.
+  const s = input.trim();
+  if (!s) return null;
+  if (!/^\d+(\.\d+)?$/.test(s)) return null;
+
+  const [whole, fracRaw = ''] = s.split('.');
+  const frac = (fracRaw + '000000').slice(0, 6);
+
+  try {
+    const w = BigInt(whole);
+    const f = BigInt(frac);
+    return w * USDC_SCALE + f;
+  } catch {
+    return null;
+  }
+}
+
+function parsePositiveInt(input: string): bigint | null {
+  const s = input.trim();
+  if (!/^\d+$/.test(s)) return null;
+  try {
+    const n = BigInt(s);
+    return n > 0n ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useCreateMarket() {
   const { address } = useAccount();
   const publicClient = usePublicClient();
@@ -60,10 +91,13 @@ export function useCreateMarket() {
   const [marketName, setMarketName] = useState('');
   const [marketTicker, setMarketTicker] = useState('');
 
+  // ✅ new: liability (USDC) input as human string
+  const [liabilityUSDCInput, setLiabilityUSDCInput] = useState<string>('100');
+
   const [positionsCount, setPositionsCount] = useState(2);
   const [positions, setPositions] = useState<PositionDraft[]>([
-    { name: '', ticker: '' },
-    { name: '', ticker: '' },
+    { name: '', ticker: '', weight: '1' },
+    { name: '', ticker: '', weight: '1' },
   ]);
 
   const [steps, setSteps] = useState<Step[]>(makeSteps());
@@ -75,7 +109,9 @@ export function useCreateMarket() {
   useEffect(() => {
     setPositions((prev) => {
       const next = prev.slice(0, positionsCount);
-      while (next.length < positionsCount) next.push({ name: '', ticker: '' });
+      while (next.length < positionsCount) {
+        next.push({ name: '', ticker: '', weight: '1' });
+      }
       return next;
     });
   }, [positionsCount]);
@@ -92,16 +128,27 @@ export function useCreateMarket() {
   const onPositionTickerChange = (i: number, raw: string) =>
     updatePos(i, { ticker: sanitizeTicker(raw, 4) });
 
+  // ✅ weight: digits only
+  const onPositionWeightChange = (i: number, raw: string) => {
+    const cleaned = raw.replace(/[^\d]/g, '');
+    updatePos(i, { weight: cleaned });
+  };
+
   const marketTickerOk = isValidTicker(marketTicker, 4);
+
+  const weightsOk = positions.every((p) => parsePositiveInt(p.weight) !== null);
   const positionsOk = positions.every(
     (p) => p.name.trim().length > 0 && isValidTicker(p.ticker, 4)
-  );
+  ) && weightsOk;
+
+  const liabilityOk = parseUSDC6(liabilityUSDCInput) !== null;
 
   const canCreate =
     !!address &&
     marketName.trim().length > 0 &&
     marketTickerOk &&
     positionsOk &&
+    liabilityOk &&
     status !== 'pending';
 
   const createMarket = async (oracleAddress: `0x${string}`) => {
@@ -257,12 +304,19 @@ export function useCreateMarket() {
       args: [marketId],
     })) as bigint[];
 
-    const initialPositions = positionIds.map((id) => ({
-      positionId: id,
-      r: 1n * WAD,
-    }));
+    // ✅ weights: caller-scale; LMSRInitLib will normalize to sum=1e18 (with reserve)
+    const initialPositions = positionIds.map((id, idx) => {
+      const w = parsePositiveInt(positions[idx]?.weight ?? '1') ?? 1n;
+      return { positionId: id, r: w * WAD };
+    });
 
-    const liabilityUSDC = 100000000000n;
+    // ✅ liability: user enters USDC, we pass raw 1e6
+    const liabilityUSDC = parseUSDC6(liabilityUSDCInput);
+    if (liabilityUSDC === null) {
+      mark('initLmsr', { status: 'error', error: 'Invalid liability USDC' });
+      return;
+    }
+
     const reserve0 = 1n * WAD;
     const isExpanding = true;
 
@@ -343,11 +397,16 @@ export function useCreateMarket() {
     onMarketTickerChange,
     marketTickerOk,
 
+    // ✅ new
+    liabilityUSDCInput,
+    setLiabilityUSDCInput,
+
     positionsCount,
     setPositionsCount,
     positions,
     updatePos,
     onPositionTickerChange,
+    onPositionWeightChange,
 
     canCreate,
     createMarket,

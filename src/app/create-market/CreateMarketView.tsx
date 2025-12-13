@@ -12,15 +12,17 @@ type Props = {
 export function CreateMarketView({ oracleAddress }: Props) {
   const m = useCreateMarket();
 
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await m.createMarket(oracleAddress);
+  };
+
   return (
     <div className="container py-4">
       <header className="d-flex justify-content-between align-items-center mb-3">
         <div>
           <h1 className="h4 mb-1">Create market</h1>
           <div className="text-muted small">Resolving markets only.</div>
-          <div className="text-muted small">
-            Oracle: <span className="font-monospace">{oracleAddress}</span>
-          </div>
         </div>
 
         <Link href="/" className="btn btn-outline-secondary btn-sm">
@@ -28,184 +30,184 @@ export function CreateMarketView({ oracleAddress }: Props) {
         </Link>
       </header>
 
-      {/* What will happen */}
-      <div className="card mb-3">
+      <form onSubmit={onSubmit} className="card">
         <div className="card-body">
-          <h2 className="h6 mb-2">What this button will do</h2>
-          <ol className="mb-0 small text-muted">
-            <li>Clone an LMSR market maker (UNBOUND)</li>
-            <li>Create a resolving market (doesResolve=true) with dmm=0 and isc=0</li>
-            <li>Create positions</li>
-            <li>Init LMSR for that market (bind + seed)</li>
-            <li>Set the LMSR clone as the pricing market maker</li>
-            <li>(Optional) Lock positions</li>
-          </ol>
-        </div>
-      </div>
-
-      {/* Status banners */}
-      {m.status === 'pending' && (
-        <div className="alert alert-warning py-2 mb-3">Transaction pending…</div>
-      )}
-      {m.status === 'error' && (
-        <div className="alert alert-danger py-2 mb-3" style={{ whiteSpace: 'pre-wrap' }}>
-          {m.errorMessage}
-        </div>
-      )}
-      {m.status === 'success' && (
-        <div className="alert alert-success py-2 mb-3">
-          Market created{m.createdMarketId !== null ? `: #${m.createdMarketId}` : ''}.
-        </div>
-      )}
-
-      {/* Per-step progress */}
-      <div className="card mb-3">
-        <div className="card-body">
-          <h2 className="h6 mb-2">Progress</h2>
-          <ol className="mb-0">
-            {m.steps.map((s) => (
-              <li key={s.key} className="mb-1">
-                <div className="d-flex align-items-center justify-content-between">
-                  <span>
-                    {s.title}{' '}
-                    <span className="text-muted small">({s.status})</span>
-                  </span>
-                  {s.txHash && (
-                    <span className="text-muted small font-monospace">
-                      {s.txHash.slice(0, 10)}…
-                    </span>
-                  )}
-                </div>
-                {s.error && (
-                  <div className="text-danger small" style={{ whiteSpace: 'pre-wrap' }}>
-                    {s.error}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ol>
-
-          {(m.createdMarketId !== null || m.createdMM !== null) && (
-            <div className="mt-3 small text-muted">
-              <div>
-                Market ID:{' '}
-                <span className="font-monospace">
-                  {m.createdMarketId !== null ? m.createdMarketId.toString() : '—'}
-                </span>
-              </div>
-              <div>
-                LMSR MM:{' '}
-                <span className="font-monospace">{m.createdMM ?? '—'}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Form */}
-      <div className="card mb-3">
-        <div className="card-body">
+          {/* Market fields */}
           <div className="row g-3">
-            <div className="col-md-8">
+            <div className="col-12">
               <label className="form-label">Market name</label>
               <input
                 className="form-control"
                 value={m.marketName}
                 onChange={(e) => m.setMarketName(e.target.value)}
+                placeholder="e.g. Premier League Winner 2026"
               />
             </div>
 
-            <div className="col-md-4">
-              <label className="form-label">Market ticker (max 4)</label>
+            <div className="col-sm-4">
+              <label className="form-label">Market ticker (4 chars)</label>
               <input
-                className={`form-control ${
-                  m.marketTicker.length > 0 && !m.marketTickerOk ? 'is-invalid' : ''
-                }`}
+                className={`form-control ${m.marketTickerOk ? '' : 'is-invalid'}`}
                 value={m.marketTicker}
                 onChange={(e) => m.onMarketTickerChange(e.target.value)}
+                placeholder="EPL6"
               />
-              {!m.marketTickerOk && m.marketTicker.length > 0 && (
-                <div className="invalid-feedback">
-                  Use A–Z / 0–9 only, uppercase, max 4 chars.
-                </div>
+              {!m.marketTickerOk && (
+                <div className="invalid-feedback">Ticker must be 1–4 A-Z/0-9</div>
               )}
             </div>
-          </div>
 
-          <div className="mt-3 text-muted small">
-            Market creation uses dmm=0 and isc=0; LMSR is cloned and initialized afterwards.
-          </div>
-        </div>
-      </div>
-
-      <div className="card mb-3">
-        <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <h2 className="h6 mb-0">Positions</h2>
-
-            <div className="d-flex align-items-center gap-2">
-              <span className="text-muted small">Count</span>
+            <div className="col-sm-4">
+              <label className="form-label"># positions</label>
               <input
+                className="form-control"
                 type="number"
                 min={2}
-                max={200}
-                className="form-control form-control-sm"
-                style={{ width: 90 }}
+                max={64}
                 value={m.positionsCount}
-                onChange={(e) =>
-                  m.setPositionsCount(Math.max(2, Number(e.target.value) || 2))
-                }
+                onChange={(e) => m.setPositionsCount(Number(e.target.value))}
               />
+              <div className="form-text">Creates Back+Lay ERC20 mirrors per position.</div>
+            </div>
+
+            <div className="col-sm-4">
+              <label className="form-label">LMSR max liability (USDC)</label>
+              <input
+                className="form-control"
+                value={m.liabilityUSDCInput}
+                onChange={(e) => m.setLiabilityUSDCInput(e.target.value)}
+                placeholder="100 or 100.50"
+              />
+              <div className="form-text">You type USDC; we pass raw 1e6 to initMarket.</div>
             </div>
           </div>
 
-          <div className="list-group">
-            {m.positions.map((p, i) => {
-              const tickerOk =
-                p.ticker.length === 0 ? true : /^[A-Z0-9]{1,4}$/.test(p.ticker);
-              return (
-                <div key={i} className="list-group-item">
-                  <div className="row g-2 align-items-center">
-                    <div className="col-md-8">
-                      <label className="form-label small mb-1">Name</label>
-                      <input
-                        className="form-control"
-                        value={p.name}
-                        onChange={(e) => m.updatePos(i, { name: e.target.value })}
-                      />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label small mb-1">Ticker (max 4)</label>
-                      <input
-                        className={`form-control ${
-                          p.ticker.length > 0 && !tickerOk ? 'is-invalid' : ''
-                        }`}
-                        value={p.ticker}
-                        onChange={(e) => m.onPositionTickerChange(i, e.target.value)}
-                      />
-                      {p.ticker.length > 0 && !tickerOk && (
-                        <div className="invalid-feedback">
-                          Use A–Z / 0–9 only, uppercase, max 4 chars.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+          <hr className="my-4" />
 
-      <div className="d-flex justify-content-end gap-2">
-        <button
-          className="btn btn-primary"
-          disabled={!m.canCreate}
-          onClick={() => m.createMarket(oracleAddress)}
-        >
-          Create market
-        </button>
-      </div>
+          {/* Positions */}
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h2 className="h6 mb-0">Positions</h2>
+            <span className="text-muted small">Each gets a Weight (normalized by LMSR)</span>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style={{ width: '50%' }}>Name</th>
+                  <th style={{ width: '20%' }}>Ticker (4)</th>
+                  <th style={{ width: '20%' }} className="text-end">
+                    Weight
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {m.positions.map((p, i) => {
+                  const nameOk = p.name.trim().length > 0;
+                  const tickerOk = p.ticker.trim().length > 0; // your hook validates properly
+                  const weightOk = /^\d+$/.test(p.weight) && p.weight !== '0' && p.weight !== '';
+                  return (
+                    <tr key={i}>
+                      <td>
+                        <input
+                          className={`form-control form-control-sm ${nameOk ? '' : 'is-invalid'}`}
+                          value={p.name}
+                          onChange={(e) => m.updatePos(i, { name: e.target.value })}
+                          placeholder={`Position ${i + 1} name`}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className={`form-control form-control-sm ${tickerOk ? '' : 'is-invalid'}`}
+                          value={p.ticker}
+                          onChange={(e) => m.onPositionTickerChange(i, e.target.value)}
+                          placeholder="ARSN"
+                        />
+                      </td>
+                      <td className="text-end">
+                        <input
+                          className={`form-control form-control-sm text-end ${
+                            weightOk ? '' : 'is-invalid'
+                          }`}
+                          value={p.weight}
+                          onChange={(e) => m.onPositionWeightChange(i, e.target.value)}
+                          placeholder="1"
+                          inputMode="numeric"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <hr className="my-4" />
+
+          {/* Action */}
+          <div className="d-flex align-items-center gap-3">
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={!m.canCreate}
+            >
+              {m.status === 'pending' ? 'Creating…' : 'Create market'}
+            </button>
+
+            {m.errorMessage && (
+              <div className="text-danger small">{m.errorMessage}</div>
+            )}
+          </div>
+
+          {/* Steps */}
+          <div className="mt-4">
+            <h3 className="h6 mb-2">Progress</h3>
+            <ul className="list-group">
+              {m.steps.map((s) => (
+                <li key={s.key} className="list-group-item d-flex justify-content-between">
+                  <div>
+                    <div className="fw-semibold">{s.title}</div>
+                    {s.error && <div className="text-danger small">{s.error}</div>}
+                  </div>
+                  <div className="text-end">
+                    <span
+                      className={
+                        s.status === 'success'
+                          ? 'badge text-bg-success'
+                          : s.status === 'pending'
+                          ? 'badge text-bg-warning'
+                          : s.status === 'error'
+                          ? 'badge text-bg-danger'
+                          : 'badge text-bg-secondary'
+                      }
+                    >
+                      {s.status}
+                    </span>
+                    {s.txHash && (
+                      <div className="small text-muted mt-1">
+                        {s.txHash.slice(0, 10)}…{s.txHash.slice(-8)}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Result */}
+          {(m.createdMarketId !== null || m.createdMM !== null) && (
+            <div className="alert alert-success mt-4 mb-0">
+              <div className="fw-semibold">Created</div>
+              {m.createdMarketId !== null && (
+                <div className="small">Market ID: {m.createdMarketId.toString()}</div>
+              )}
+              {m.createdMM !== null && (
+                <div className="small">Pricing MM: {m.createdMM}</div>
+              )}
+            </div>
+          )}
+        </div>
+      </form>
     </div>
   );
 }
