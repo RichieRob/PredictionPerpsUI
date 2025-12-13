@@ -17,9 +17,11 @@ type StepKey =
   | 'cloneMM'
   | 'createMarket'
   | 'createPositions'
+  | 'fundMM'          // 👈 NEW
   | 'initLmsr'
   | 'setPricingMM'
   | 'lockPositions';
+
 
 export type Step = {
   key: StepKey;
@@ -38,9 +40,12 @@ function makeSteps(): Step[] {
       status: 'idle',
     },
     { key: 'createPositions', title: 'Create positions', status: 'idle' },
+    { key: 'fundMM', title: 'Fund market maker with ppUSDC', status: 'idle' },
+
     { key: 'initLmsr', title: 'Init LMSR for that market (bind + seed)', status: 'idle' },
     { key: 'setPricingMM', title: 'Set pricing market maker = LMSR', status: 'idle' },
     { key: 'lockPositions', title: 'Lock positions (optional)', status: 'idle' },
+    
   ];
 }
 
@@ -80,7 +85,7 @@ export function useCreateMarket() {
   const publicClient = usePublicClient();
 
   const chainKey = 'sepolia' as const;
-  const { ledger, marketMakerHub } = CONTRACTS[chainKey];
+const { ledger, marketMakerHub, ppUSDC } = CONTRACTS[chainKey];
 
   const { writeContractAsync } = useWriteContract();
   const { status, errorMessage, runTx } = useLedgerTx({});
@@ -292,6 +297,37 @@ export function useCreateMarket() {
     }
     mark('createPositions', { status: 'success', txHash: res2.txHash });
 
+// ============================================================
+// 3) fund market maker with ppUSDC = liability
+// ============================================================
+mark('fundMM', { status: 'pending', error: undefined, txHash: undefined });
+
+const liabilityUSDC = parseUSDC6(liabilityUSDCInput);
+if (liabilityUSDC === null) {
+  mark('fundMM', { status: 'error', error: 'Invalid liability USDC' });
+  return;
+}
+
+// transfer ppUSDC from creator -> MM
+const resFund = await runTx(
+  () =>
+    writeContractAsync({
+      address: ppUSDC as `0x${string}`,
+      abi: ABIS.ppUSDC,
+      functionName: 'transfer',
+      args: [mm as `0x${string}`, liabilityUSDC],
+    }),
+  { label: 'Fund MM (ppUSDC)' }
+);
+
+if (!resFund) {
+  mark('fundMM', { status: 'error', error: errorMessage || 'Failed' });
+  return;
+}
+
+mark('fundMM', { status: 'success', txHash: resFund.txHash });
+
+    
     // ============================================================
     // 3) initMarket on LMSR clone (binds marketId)
     // ============================================================
@@ -310,12 +346,7 @@ export function useCreateMarket() {
       return { positionId: id, r: w * WAD };
     });
 
-    // ✅ liability: user enters USDC, we pass raw 1e6
-    const liabilityUSDC = parseUSDC6(liabilityUSDCInput);
-    if (liabilityUSDC === null) {
-      mark('initLmsr', { status: 'error', error: 'Invalid liability USDC' });
-      return;
-    }
+  
 
     const reserve0 = 1n * WAD;
     const isExpanding = true;
